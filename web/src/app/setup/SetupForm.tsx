@@ -9,6 +9,7 @@ import type {
 
 interface Props {
   initial: BotConfigFormInitial | null;
+  initialTelegramId?: string;
   action: (input: BotConfigInput) => Promise<{ error: string | null }>;
   loadModelsAction: (input: {
     openai_api_key?: string;
@@ -45,8 +46,28 @@ const XIAOMI_MIMO_MODELS: OpenAIModelOption[] = [
   { id: "mimo-v2.5-asr", created: 1, owned_by: "xiaomi-mimo" },
 ];
 
-function toInput(c: BotConfigFormInitial | null): BotConfigInput {
-  if (!c) return EMPTY;
+function mergeTelegramId(ids: string, telegramId?: string) {
+  const cleanId = telegramId?.trim();
+  if (!cleanId) return ids;
+
+  const parts = ids
+    .split(/[\s,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set([...parts, cleanId])).join(", ");
+}
+
+function toInput(
+  c: BotConfigFormInitial | null,
+  initialTelegramId?: string,
+): BotConfigInput {
+  if (!c) {
+    return {
+      ...EMPTY,
+      allowed_telegram_ids: mergeTelegramId("", initialTelegramId),
+    };
+  }
   return {
     telegram_bot_token: "",
     ai_provider: c.ai_provider ?? "openai",
@@ -56,7 +77,10 @@ function toInput(c: BotConfigFormInitial | null): BotConfigInput {
     notion_token: "",
     personal_db_id: c.personal_db_id ?? "",
     business_db_id: c.business_db_id ?? "",
-    allowed_telegram_ids: (c.allowed_telegram_ids ?? []).join(", "),
+    allowed_telegram_ids: mergeTelegramId(
+      (c.allowed_telegram_ids ?? []).join(", "),
+      initialTelegramId,
+    ),
   };
 }
 
@@ -89,12 +113,15 @@ function mergeModelOptions(
 
 export function SetupForm({
   initial,
+  initialTelegramId,
   action,
   loadModelsAction,
   registerWebhookAction,
   checkWebhookAction,
 }: Props) {
-  const [form, setForm] = useState<BotConfigInput>(() => toInput(initial));
+  const [form, setForm] = useState<BotConfigInput>(() =>
+    toInput(initial, initialTelegramId),
+  );
   const [saved, setSaved] = useState(false);
   const [modelOptions, setModelOptions] = useState<OpenAIModelOption[]>(() =>
     providerFallbackModels(initial?.ai_provider, initial?.ai_base_url),
@@ -263,6 +290,12 @@ export function SetupForm({
       className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
     >
       <Section title="Telegram" description="Bot token and allowed chat IDs.">
+        {initialTelegramId ? (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            Telegram ID {initialTelegramId} is prefilled from the Mini App
+            allowlist flow.
+          </div>
+        ) : null}
         {field("telegram_bot_token", "Bot token", {
           required: !initial?.has_telegram_bot_token,
           placeholder: initial?.has_telegram_bot_token

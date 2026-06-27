@@ -22,6 +22,7 @@ declare const Deno: {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET") ?? "";
+const WEB_APP_URL = Deno.env.get("WEB_APP_URL") ?? "";
 
 async function dbSelect<T>(
   table: string,
@@ -519,7 +520,18 @@ async function handleMessage(msg: TgMessage): Promise<void> {
   const token = cfg.telegram_bot_token;
 
   if (!text || text === "/start" || text === "/help") {
-    await sendMessage(token, chatId, HELP);
+    await sendMessage(
+      token,
+      chatId,
+      HELP,
+      WEB_APP_URL
+        ? {
+            inline_keyboard: [
+              [{ text: "Open Finance App", web_app: { url: WEB_APP_URL } }],
+            ],
+          }
+        : undefined,
+    );
     return;
   }
 

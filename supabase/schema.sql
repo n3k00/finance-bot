@@ -63,6 +63,21 @@ create index if not exists entries_log_user_date_idx
 create index if not exists entries_log_user_book_idx
   on public.entries_log (user_id, book, entry_date desc);
 
+-- 3b) Telegram Mini App invite allowlist ------------------------
+-- Admin-managed list. Add rows directly from Supabase SQL Editor
+-- or Table Editor; no app admin panel is required.
+create table if not exists public.telegram_allowlist (
+  telegram_user_id     bigint primary key,
+  label                text,
+  is_active            boolean not null default true,
+  linked_user_id       uuid references auth.users (id) on delete set null,
+  created_at           timestamptz not null default now(),
+  updated_at           timestamptz not null default now()
+);
+
+create index if not exists telegram_allowlist_linked_user_idx
+  on public.telegram_allowlist (linked_user_id);
+
 -- Existing projects created from older versions had Notion fields as
 -- required. Keep reruns idempotent while making Notion sync optional.
 alter table public.bot_config
@@ -95,15 +110,22 @@ create trigger pending_entries_touch
   before update on public.pending_entries
   for each row execute function public.touch_updated_at();
 
+drop trigger if exists telegram_allowlist_touch on public.telegram_allowlist;
+create trigger telegram_allowlist_touch
+  before update on public.telegram_allowlist
+  for each row execute function public.touch_updated_at();
+
 -- 5) Row Level Security -----------------------------------------
 alter table public.bot_config       enable row level security;
 alter table public.pending_entries  enable row level security;
 alter table public.entries_log      enable row level security;
+alter table public.telegram_allowlist enable row level security;
 
 -- Users can only see or edit their own rows.
 drop policy if exists "own bot_config"       on public.bot_config;
 drop policy if exists "own pending_entries"  on public.pending_entries;
 drop policy if exists "own entries_log"      on public.entries_log;
+drop policy if exists "own linked telegram_allowlist" on public.telegram_allowlist;
 
 create policy "own bot_config"
   on public.bot_config for all
@@ -120,6 +142,11 @@ create policy "own entries_log"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+create policy "own linked telegram_allowlist"
+  on public.telegram_allowlist for select
+  to authenticated
+  using ((select auth.uid()) = linked_user_id);
+
 -- 6) Data API grants ---------------------------------------------
 -- New Supabase projects may not expose SQL-created tables to the
 -- Data API automatically. RLS above still controls which rows each
@@ -128,6 +155,7 @@ grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.bot_config to authenticated;
 grant select, insert, update, delete on public.pending_entries to authenticated;
 grant select, insert, update, delete on public.entries_log to authenticated;
+grant select on public.telegram_allowlist to authenticated;
 
 -- Remove the old helper view if this schema is re-run on an existing
 -- project. The Edge Function uses the service role and queries

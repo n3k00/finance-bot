@@ -65,7 +65,8 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/settings");
+    const query = new URLSearchParams(window.location.search);
+    router.push(query.get("next") ?? "/settings");
     router.refresh();
   }
 

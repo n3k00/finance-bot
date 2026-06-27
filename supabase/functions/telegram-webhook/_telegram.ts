@@ -2,7 +2,8 @@
 
 export interface InlineButton {
   text: string;
-  callback_data: string;
+  callback_data?: string;
+  web_app?: { url: string };
 }
 
 export async function tg(

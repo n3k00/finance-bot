@@ -14,7 +14,12 @@ import { SetupForm } from "../setup/SetupForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ telegram_id?: string }>;
+}) {
+  const params = await searchParams;
   const { email } = await requireUser();
   const [existing, databaseStatus] = await Promise.all([
     getBotConfig(),
@@ -38,6 +43,7 @@ export default async function SettingsPage() {
 
           <SetupForm
             initial={existing}
+            initialTelegramId={params.telegram_id}
             action={saveBotConfig}
             loadModelsAction={listOpenAIModels}
             registerWebhookAction={registerTelegramWebhook}
