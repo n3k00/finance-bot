@@ -527,7 +527,7 @@ async function handleMessage(msg: TgMessage): Promise<void> {
       WEB_APP_URL
         ? {
             inline_keyboard: [
-              [{ text: "Open Finance App", web_app: { url: WEB_APP_URL } }],
+              [{ text: "စာရင်း", web_app: { url: WEB_APP_URL } }],
             ],
           }
         : undefined,

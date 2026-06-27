@@ -209,7 +209,7 @@ async function setTelegramMenuButtonForToken(botToken: string): Promise<{
       body: JSON.stringify({
         menu_button: {
           type: "web_app",
-          text: "Finance App",
+          text: "စာရင်း",
           web_app: { url: miniAppUrl },
         },
       }),
