@@ -1,4 +1,17 @@
 project_id = "tnpjpojkiwmqrliynebd"
 
+[auth]
+enabled = true
+site_url = "https://finance-bot-pi.vercel.app"
+additional_redirect_urls = [
+  "https://finance-bot-pi.vercel.app/**",
+  "http://localhost:3000/**",
+]
+
 [functions.telegram-webhook]
 verify_jwt = false
+
+[storage.vector]
+enabled = false
+max_buckets = 10
+max_indexes = 5
