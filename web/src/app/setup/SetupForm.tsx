@@ -23,6 +23,10 @@ interface Props {
     error: string | null;
     message: string | null;
   }>;
+  setMenuButtonAction: () => Promise<{
+    error: string | null;
+    message: string | null;
+  }>;
 }
 
 const EMPTY: BotConfigInput = {
@@ -118,6 +122,7 @@ export function SetupForm({
   loadModelsAction,
   registerWebhookAction,
   checkWebhookAction,
+  setMenuButtonAction,
 }: Props) {
   const [form, setForm] = useState<BotConfigInput>(() =>
     toInput(initial, initialTelegramId),
@@ -132,6 +137,9 @@ export function SetupForm({
   const [webhookMessage, setWebhookMessage] = useState<string | null>(null);
   const [webhookError, setWebhookError] = useState<string | null>(null);
   const [checkingWebhook, setCheckingWebhook] = useState(false);
+  const [settingMenuButton, setSettingMenuButton] = useState(false);
+  const [menuButtonMessage, setMenuButtonMessage] = useState<string | null>(null);
+  const [menuButtonError, setMenuButtonError] = useState<string | null>(null);
   const providerOptions = [
     {
       value: "openai",
@@ -284,6 +292,19 @@ export function SetupForm({
     setCheckingWebhook(false);
   }
 
+  async function setMenuButton() {
+    setSettingMenuButton(true);
+    setMenuButtonMessage(null);
+    setMenuButtonError(null);
+    const res = await setMenuButtonAction();
+    if (res.error) {
+      setMenuButtonError(res.error);
+    } else {
+      setMenuButtonMessage(res.message ?? "Telegram menu button set.");
+    }
+    setSettingMenuButton(false);
+  }
+
   return (
     <form
       action={formAction}
@@ -349,6 +370,37 @@ export function SetupForm({
           {webhookError ? (
             <p className="mt-2 text-xs font-medium text-red-700">
               {webhookError}
+            </p>
+          ) : null}
+        </div>
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-800">
+                Telegram menu button
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                Adds a permanent menu shortcut in the bot chat. Users can still
+                type messages normally.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={setMenuButton}
+              disabled={settingMenuButton}
+              className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-55"
+            >
+              {settingMenuButton ? "Setting..." : "Set menu button"}
+            </button>
+          </div>
+          {menuButtonMessage ? (
+            <p className="mt-2 whitespace-pre-line text-xs font-medium text-emerald-700">
+              {menuButtonMessage}
+            </p>
+          ) : null}
+          {menuButtonError ? (
+            <p className="mt-2 text-xs font-medium text-red-700">
+              {menuButtonError}
             </p>
           ) : null}
         </div>

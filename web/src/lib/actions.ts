@@ -66,6 +66,19 @@ function mergeModels(
   );
 }
 
+function getAppUrl() {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+
+  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (production) return `https://${production}`.replace(/\/+$/, "");
+
+  const deployment = process.env.VERCEL_URL?.trim();
+  if (deployment) return `https://${deployment}`.replace(/\/+$/, "");
+
+  return "http://localhost:3000";
+}
+
 export async function saveBotConfig(input: BotConfigInput) {
   const supabase = await createClient();
   const {
@@ -148,6 +161,71 @@ export async function saveBotConfig(input: BotConfigInput) {
   revalidatePath("/setup");
   revalidatePath("/dashboard");
   return { error: null };
+}
+
+export async function setTelegramMenuButton(): Promise<{
+  error: string | null;
+  message: string | null;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Not authenticated", message: null };
+  }
+
+  const { data, error } = await supabase
+    .from("bot_config")
+    .select("telegram_bot_token")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    return { error: error.message, message: null };
+  }
+
+  const botToken = (data?.telegram_bot_token as string | undefined) ?? "";
+  if (!botToken) {
+    return {
+      error: "Save a Telegram bot token before setting the menu button.",
+      message: null,
+    };
+  }
+
+  const miniAppUrl = `${getAppUrl()}/telegram`;
+  const res = await fetch(
+    `https://api.telegram.org/bot${botToken}/setChatMenuButton`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        menu_button: {
+          type: "web_app",
+          text: "Finance App",
+          web_app: { url: miniAppUrl },
+        },
+      }),
+      cache: "no-store",
+    },
+  );
+
+  const json = (await res.json()) as {
+    ok?: boolean;
+    description?: string;
+  };
+
+  if (!res.ok || !json.ok) {
+    return {
+      error: json.description ?? `Telegram setChatMenuButton failed (${res.status}).`,
+      message: null,
+    };
+  }
+
+  return {
+    error: null,
+    message: `Telegram menu button set: ${miniAppUrl}`,
+  };
 }
 
 export async function listOpenAIModels(input: {

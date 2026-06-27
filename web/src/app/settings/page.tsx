@@ -8,6 +8,7 @@ import {
   listOpenAIModels,
   registerTelegramWebhook,
   saveBotConfig,
+  setTelegramMenuButton,
 } from "@/lib/actions";
 import { AdminShell } from "../AdminShell";
 import { SetupForm } from "../setup/SetupForm";
@@ -48,6 +49,7 @@ export default async function SettingsPage({
             loadModelsAction={listOpenAIModels}
             registerWebhookAction={registerTelegramWebhook}
             checkWebhookAction={checkTelegramWebhook}
+            setMenuButtonAction={setTelegramMenuButton}
           />
         </div>
 
