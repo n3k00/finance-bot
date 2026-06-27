@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+web/node_modules/
+
+# Build artifacts
+.next/
+web/.next/
+out/
+web/out/
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+web/.env
+web/.env.*
+!web/.env.example
+!web/.env.*.example
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# Logs and editor state
+*.log
+.DS_Store
+.vscode/
+.idea/
+
+# TypeScript caches
+*.tsbuildinfo
+
+# Local backups created during repo setup
+.codex-backup/

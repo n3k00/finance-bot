@@ -1,0 +1,21 @@
+# Build artifacts
+.next/
+out/
+
+# Dependencies
+node_modules/
+
+# Env
+.env
+.env.local
+.env*.local
+
+# Supabase
+supabase/.branches
+supabase/.temp
+
+# Misc
+*.log
+.DS_Store
+.vscode/
+.idea/
