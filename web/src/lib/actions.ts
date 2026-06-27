@@ -193,6 +193,13 @@ export async function setTelegramMenuButton(): Promise<{
     };
   }
 
+  return setTelegramMenuButtonForToken(botToken);
+}
+
+async function setTelegramMenuButtonForToken(botToken: string): Promise<{
+  error: string | null;
+  message: string | null;
+}> {
   const miniAppUrl = `${getAppUrl()}/telegram`;
   const res = await fetch(
     `https://api.telegram.org/bot${botToken}/setChatMenuButton`,
@@ -393,11 +400,19 @@ export async function registerTelegramWebhook(input?: BotConfigInput): Promise<{
     };
   }
 
+  const menuResult = await setTelegramMenuButtonForToken(botToken);
+  if (menuResult.error) {
+    return {
+      error: null,
+      message: `Webhook registered: ${webhookUrl}\nMenu button not updated: ${menuResult.error}`,
+    };
+  }
+
   return {
     error: null,
     message: secret
-      ? `Webhook registered: ${webhookUrl}`
-      : `Webhook registered without a secret token: ${webhookUrl}`,
+      ? `Webhook registered: ${webhookUrl}\n${menuResult.message}`
+      : `Webhook registered without a secret token: ${webhookUrl}\n${menuResult.message}`,
   };
 }
 
