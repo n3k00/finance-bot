@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getAppUrl } from "./siteUrl";
 import { createClient } from "./supabase/server";
 import type { BotConfigInput, OpenAIModelOption } from "./types";
 
@@ -50,19 +51,6 @@ function mergeModels(
   return Array.from(byId.values()).sort(
     (a, b) => b.created - a.created || a.id.localeCompare(b.id),
   );
-}
-
-function getAppUrl() {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) return explicit.replace(/\/+$/, "");
-
-  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
-  if (production) return `https://${production}`.replace(/\/+$/, "");
-
-  const deployment = process.env.VERCEL_URL?.trim();
-  if (deployment) return `https://${deployment}`.replace(/\/+$/, "");
-
-  return "http://localhost:3000";
 }
 
 function getTelegramBotToken() {

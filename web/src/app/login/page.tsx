@@ -1,23 +1,23 @@
-import { LoginWithTelegram } from "./LoginWithTelegram";
-import { getTelegramBotToken } from "@/lib/telegramAuth";
+import Link from "next/link";
+import { hasTelegramOidcConfig } from "@/lib/telegramOidc";
 
-async function getBotUsername() {
-  const token = getTelegramBotToken();
-  if (!token) return null;
-
-  const res = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
-    cache: "no-store",
-  });
-  const json = (await res.json()) as {
-    ok?: boolean;
-    result?: { username?: string };
-  };
-
-  return json.ok ? (json.result?.username ?? null) : null;
+function getErrorMessage(error?: string) {
+  if (!error) return null;
+  if (error === "telegram_oidc_not_configured") {
+    return "Telegram OpenID Connect is not configured on the server.";
+  }
+  return error;
 }
 
-export default async function LoginPage() {
-  const botUsername = await getBotUsername();
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; next?: string }>;
+}) {
+  const params = await searchParams;
+  const configured = hasTelegramOidcConfig();
+  const next = params.next ? `?next=${encodeURIComponent(params.next)}` : "";
+  const error = getErrorMessage(params.error);
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
@@ -34,11 +34,26 @@ export default async function LoginPage() {
           </p>
         </div>
 
-        {botUsername ? (
-          <LoginWithTelegram botUsername={botUsername} />
+        {configured ? (
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <Link
+              href={`/api/telegram/oidc/start${next}`}
+              className="flex h-12 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Sign in with Telegram
+            </Link>
+            <p className="mt-3 text-center text-sm leading-6 text-slate-500">
+              Only Telegram IDs in the allowlist can enter.
+            </p>
+            {error ? (
+              <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm leading-6 text-red-700">
+                {error}
+              </div>
+            ) : null}
+          </div>
         ) : (
           <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm leading-6 text-red-700 shadow-sm">
-            Telegram bot is not configured on the server.
+            Telegram OpenID Connect is not configured on the server.
           </div>
         )}
       </section>
