@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { verifyTelegramInitData } from "@/lib/telegramMiniApp";
+import {
+  type TelegramMiniAppUser,
+  type VerifiedTelegramInitData,
+  verifyTelegramInitData,
+} from "@/lib/telegramMiniApp";
 
 interface RequestBody {
   initData?: string;
@@ -16,6 +20,85 @@ interface AllowlistRow {
 
 interface BotConfigRow {
   allowed_telegram_ids: number[] | null;
+}
+
+function getTelegramAuthEmail(telegramId: number) {
+  return `tg-${telegramId}@telegram.finance-bot.local`;
+}
+
+function getDisplayName(user: TelegramMiniAppUser) {
+  return [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+}
+
+async function createOrLinkAuthSession({
+  admin,
+  allowlistRow,
+  verified,
+}: {
+  admin: ReturnType<typeof createAdminClient>;
+  allowlistRow: AllowlistRow;
+  verified: VerifiedTelegramInitData;
+}) {
+  const telegramId = verified.user.id;
+  let email = getTelegramAuthEmail(telegramId);
+  let authUserId = allowlistRow.linked_user_id;
+
+  if (authUserId) {
+    const { data, error } = await admin.auth.admin.getUserById(authUserId);
+    if (error) {
+      return { error: error.message };
+    }
+    if (!data.user?.email) {
+      return { error: "Linked Supabase Auth user has no email." };
+    }
+    email = data.user.email;
+  }
+
+  const { data: linkData, error: linkError } =
+    await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+      options: {
+        data: {
+          provider: "telegram",
+          telegram_user_id: telegramId,
+          telegram_username: verified.user.username ?? null,
+          telegram_name: getDisplayName(verified.user) || null,
+        },
+      },
+    });
+
+  if (linkError) {
+    return { error: linkError.message };
+  }
+
+  const tokenHash = linkData.properties?.hashed_token;
+  authUserId = authUserId ?? linkData.user?.id ?? null;
+
+  if (!tokenHash || !authUserId) {
+    return { error: "Failed to create Telegram auth session." };
+  }
+
+  const supabase = await createClient();
+  const { data: sessionData, error: verifyError } =
+    await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: "email",
+    });
+
+  if (verifyError) {
+    return { error: verifyError.message };
+  }
+
+  if (sessionData.user?.id !== authUserId) {
+    return { error: "Telegram auth linked to an unexpected user." };
+  }
+
+  return {
+    error: null,
+    userId: authUserId,
+    email,
+  };
 }
 
 export async function POST(request: Request) {
@@ -63,36 +146,23 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const authResult = await createOrLinkAuthSession({
+    admin,
+    allowlistRow: allowed,
+    verified,
+  });
 
-  if (!user) {
-    return NextResponse.json({
-      allowed: true,
-      linked: false,
-      needsLogin: true,
-      telegramUser: verified.user,
-      nextUrl: `/login?next=${encodeURIComponent(`/settings?telegram_id=${telegramId}`)}`,
-    });
-  }
-
-  if (allowed.linked_user_id && allowed.linked_user_id !== user.id) {
+  if (authResult.error || !authResult.userId) {
     return NextResponse.json(
-      {
-        allowed: false,
-        error: "This Telegram account is already linked to another web account.",
-        telegramUser: verified.user,
-      },
-      { status: 409 },
+      { error: authResult.error ?? "Telegram auth failed." },
+      { status: 500 },
     );
   }
 
   const { data: config, error: configError } = await admin
     .from("bot_config")
     .select("allowed_telegram_ids")
-    .eq("user_id", user.id)
+    .eq("user_id", authResult.userId)
     .maybeSingle();
 
   if (configError) {
@@ -109,7 +179,7 @@ export async function POST(request: Request) {
     const { error: updateError } = await admin
       .from("bot_config")
       .update({ allowed_telegram_ids: nextIds })
-      .eq("user_id", user.id);
+      .eq("user_id", authResult.userId);
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -118,7 +188,7 @@ export async function POST(request: Request) {
 
   const { error: linkError } = await admin
     .from("telegram_allowlist")
-    .update({ linked_user_id: user.id })
+    .update({ linked_user_id: authResult.userId })
     .eq("telegram_user_id", telegramId);
 
   if (linkError) {
@@ -131,6 +201,6 @@ export async function POST(request: Request) {
     needsLogin: false,
     hasConfig,
     telegramUser: verified.user,
-    nextUrl: `/settings?telegram_id=${telegramId}`,
+    nextUrl: "/dashboard",
   });
 }

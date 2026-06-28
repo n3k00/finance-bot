@@ -62,18 +62,9 @@ export default function TelegramMiniAppPage() {
       }
 
       setNextUrl(json.nextUrl ?? "/settings");
-      if (json.needsLogin) {
-        setStatus("You are allowed. Sign in to finish setup.");
-        return;
-      }
-
-      setStatus(
-        json.linked
-          ? "Telegram ID linked. Opening settings..."
-          : "You are allowed. Finish setup in settings.",
-      );
+      setStatus("Telegram access confirmed. Opening dashboard...");
       window.setTimeout(() => {
-        window.location.href = json.nextUrl ?? "/settings";
+        window.location.href = json.nextUrl ?? "/dashboard";
       }, 900);
     }
 
