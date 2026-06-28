@@ -15,22 +15,9 @@ interface Props {
     openai_api_key?: string;
     ai_base_url?: string;
   }) => Promise<{ error: string | null; models: OpenAIModelOption[] }>;
-  registerWebhookAction: (input?: BotConfigInput) => Promise<{
-    error: string | null;
-    message: string | null;
-  }>;
-  checkWebhookAction: () => Promise<{
-    error: string | null;
-    message: string | null;
-  }>;
-  setMenuButtonAction: () => Promise<{
-    error: string | null;
-    message: string | null;
-  }>;
 }
 
 const EMPTY: BotConfigInput = {
-  telegram_bot_token: "",
   ai_provider: "openai",
   ai_base_url: "https://api.openai.com/v1",
   openai_api_key: "",
@@ -38,7 +25,6 @@ const EMPTY: BotConfigInput = {
   notion_token: "",
   personal_db_id: "",
   business_db_id: "",
-  allowed_telegram_ids: "",
 };
 
 const XIAOMI_MIMO_MODELS: OpenAIModelOption[] = [
@@ -50,30 +36,12 @@ const XIAOMI_MIMO_MODELS: OpenAIModelOption[] = [
   { id: "mimo-v2.5-asr", created: 1, owned_by: "xiaomi-mimo" },
 ];
 
-function mergeTelegramId(ids: string, telegramId?: string) {
-  const cleanId = telegramId?.trim();
-  if (!cleanId) return ids;
-
-  const parts = ids
-    .split(/[\s,]+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  return Array.from(new Set([...parts, cleanId])).join(", ");
-}
-
 function toInput(
   c: BotConfigFormInitial | null,
-  initialTelegramId?: string,
 ): BotConfigInput {
-  if (!c) {
-    return {
-      ...EMPTY,
-      allowed_telegram_ids: mergeTelegramId("", initialTelegramId),
-    };
-  }
+  if (!c) return EMPTY;
+
   return {
-    telegram_bot_token: "",
     ai_provider: c.ai_provider ?? "openai",
     ai_base_url: c.ai_base_url ?? "https://api.openai.com/v1",
     openai_api_key: "",
@@ -81,10 +49,6 @@ function toInput(
     notion_token: "",
     personal_db_id: c.personal_db_id ?? "",
     business_db_id: c.business_db_id ?? "",
-    allowed_telegram_ids: mergeTelegramId(
-      (c.allowed_telegram_ids ?? []).join(", "),
-      initialTelegramId,
-    ),
   };
 }
 
@@ -120,26 +84,14 @@ export function SetupForm({
   initialTelegramId,
   action,
   loadModelsAction,
-  registerWebhookAction,
-  checkWebhookAction,
-  setMenuButtonAction,
 }: Props) {
-  const [form, setForm] = useState<BotConfigInput>(() =>
-    toInput(initial, initialTelegramId),
-  );
+  const [form, setForm] = useState<BotConfigInput>(() => toInput(initial));
   const [saved, setSaved] = useState(false);
   const [modelOptions, setModelOptions] = useState<OpenAIModelOption[]>(() =>
     providerFallbackModels(initial?.ai_provider, initial?.ai_base_url),
   );
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
-  const [registeringWebhook, setRegisteringWebhook] = useState(false);
-  const [webhookMessage, setWebhookMessage] = useState<string | null>(null);
-  const [webhookError, setWebhookError] = useState<string | null>(null);
-  const [checkingWebhook, setCheckingWebhook] = useState(false);
-  const [settingMenuButton, setSettingMenuButton] = useState(false);
-  const [menuButtonMessage, setMenuButtonMessage] = useState<string | null>(null);
-  const [menuButtonError, setMenuButtonError] = useState<string | null>(null);
   const providerOptions = [
     {
       value: "openai",
@@ -168,7 +120,6 @@ export function SetupForm({
     formData: FormData,
   ) {
     const input: BotConfigInput = {
-      telegram_bot_token: String(formData.get("telegram_bot_token") ?? ""),
       ai_provider: String(formData.get("ai_provider") ?? "openai"),
       ai_base_url: String(formData.get("ai_base_url") ?? ""),
       openai_api_key: String(formData.get("openai_api_key") ?? ""),
@@ -176,7 +127,6 @@ export function SetupForm({
       notion_token: String(formData.get("notion_token") ?? ""),
       personal_db_id: String(formData.get("personal_db_id") ?? ""),
       business_db_id: String(formData.get("business_db_id") ?? ""),
-      allowed_telegram_ids: String(formData.get("allowed_telegram_ids") ?? ""),
     };
     const res = await action(input);
     if (!res.error) setSaved(true);
@@ -265,143 +215,19 @@ export function SetupForm({
     setLoadingModels(false);
   }
 
-  async function registerWebhook() {
-    setRegisteringWebhook(true);
-    setWebhookMessage(null);
-    setWebhookError(null);
-    const res = await registerWebhookAction(form);
-    if (res.error) {
-      setWebhookError(res.error);
-    } else {
-      setWebhookMessage(res.message ?? "Webhook registered.");
-      setSaved(true);
-    }
-    setRegisteringWebhook(false);
-  }
-
-  async function checkWebhook() {
-    setCheckingWebhook(true);
-    setWebhookMessage(null);
-    setWebhookError(null);
-    const res = await checkWebhookAction();
-    if (res.error) {
-      setWebhookError(res.error);
-    } else {
-      setWebhookMessage(res.message ?? "Webhook is configured.");
-    }
-    setCheckingWebhook(false);
-  }
-
-  async function setMenuButton() {
-    setSettingMenuButton(true);
-    setMenuButtonMessage(null);
-    setMenuButtonError(null);
-    const res = await setMenuButtonAction();
-    if (res.error) {
-      setMenuButtonError(res.error);
-    } else {
-      setMenuButtonMessage(res.message ?? "Telegram menu button set.");
-    }
-    setSettingMenuButton(false);
-  }
-
   return (
     <form
       action={formAction}
       className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
     >
-      <Section title="Telegram" description="Bot token and allowed chat IDs.">
-        {initialTelegramId ? (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            Telegram ID {initialTelegramId} is prefilled from the Mini App
-            allowlist flow.
-          </div>
-        ) : null}
-        {field("telegram_bot_token", "Bot token", {
-          required: !initial?.has_telegram_bot_token,
-          placeholder: initial?.has_telegram_bot_token
-            ? "Saved token hidden"
-            : "123456789:ABCdef...",
-          status: initial?.has_telegram_bot_token ? "Saved" : undefined,
-          help: initial?.has_telegram_bot_token
-            ? "Configured. Leave blank to keep the saved token."
-            : "Create the bot with @BotFather.",
-        })}
-        {field("allowed_telegram_ids", "Allowed Telegram IDs", {
-          required: true,
-          placeholder: "123456789, 987654321",
-          help: "Comma-separated IDs allowed to use this bot.",
-        })}
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-800">
-                Telegram webhook
-              </p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                Saves this configuration, then registers the hosted Edge
-                Function as this bot&apos;s webhook.
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <button
-                type="button"
-                onClick={checkWebhook}
-                disabled={checkingWebhook}
-                className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-55"
-              >
-                {checkingWebhook ? "Checking..." : "Check webhook"}
-              </button>
-              <button
-                type="button"
-                onClick={registerWebhook}
-                disabled={registeringWebhook}
-                className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-55"
-              >
-                {registeringWebhook ? "Registering..." : "Save and register"}
-              </button>
-            </div>
-          </div>
-          {webhookMessage ? (
-            <p className="mt-2 whitespace-pre-line text-xs font-medium text-emerald-700">
-              {webhookMessage}
-            </p>
-          ) : null}
-          {webhookError ? (
-            <p className="mt-2 text-xs font-medium text-red-700">
-              {webhookError}
-            </p>
-          ) : null}
-        </div>
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-800">
-                Telegram menu button
-              </p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                Adds a permanent menu shortcut in the bot chat. Users can still
-                type messages normally.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={setMenuButton}
-              disabled={settingMenuButton}
-              className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-55"
-            >
-              {settingMenuButton ? "Setting..." : "Set menu button"}
-            </button>
-          </div>
-          {menuButtonMessage ? (
-            <p className="mt-2 whitespace-pre-line text-xs font-medium text-emerald-700">
-              {menuButtonMessage}
-            </p>
-          ) : null}
-          {menuButtonError ? (
-            <p className="mt-2 text-xs font-medium text-red-700">
-              {menuButtonError}
-            </p>
+      <Section title="Telegram" description="Account access is managed by admin allowlist.">
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm leading-6 text-emerald-800">
+          Telegram login uses the shared bot and Supabase allowlist. Users do
+          not need to enter bot tokens or Telegram IDs here.
+          {initialTelegramId ? (
+            <span className="mt-1 block font-mono text-xs">
+              Telegram ID: {initialTelegramId}
+            </span>
           ) : null}
         </div>
       </Section>

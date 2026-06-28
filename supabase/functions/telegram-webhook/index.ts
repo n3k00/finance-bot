@@ -23,6 +23,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET") ?? "";
 const WEB_APP_URL = Deno.env.get("WEB_APP_URL") ?? "";
+const TELEGRAM_BOT_TOKEN =
+  Deno.env.get("TELEGRAM_BOT_TOKEN") ??
+  Deno.env.get("TELEGRAM_MINI_APP_BOT_TOKEN") ??
+  "";
 
 async function dbSelect<T>(
   table: string,
@@ -100,13 +104,34 @@ async function findConfigByTelegramIdentity(
   const ids = Array.from(new Set([chatId, fromId].filter(Boolean))) as number[];
   const filters =
     ids.length > 1
-      ? { or: ids.map((id) => `allowed_telegram_ids.cs.{${id}}`).join(",") }
-      : { allowed_telegram_ids: `cs.{${chatId}}` };
+      ? { or: ids.map((id) => `telegram_user_id.eq.${id}`).join(",") }
+      : { telegram_user_id: `eq.${chatId}` };
+
+  const allowedRows = await dbSelect<{
+    telegram_user_id: number;
+    is_active: boolean;
+    linked_user_id: string | null;
+  }>(
+    "telegram_allowlist",
+    "telegram_user_id,is_active,linked_user_id",
+    filters,
+  );
+  const allowed = allowedRows.find((row) => row.is_active && row.linked_user_id);
+  if (!allowed?.linked_user_id) return null;
 
   const rows = await dbSelect<BotConfig>(
     "bot_config",
-    "user_id,telegram_bot_token,ai_provider,ai_base_url,openai_api_key,openai_model,notion_token,personal_db_id,business_db_id,allowed_telegram_ids",
-    filters,
+    "user_id,ai_provider,ai_base_url,openai_api_key,openai_model,notion_token,personal_db_id,business_db_id",
+    { user_id: `eq.${allowed.linked_user_id}` },
+  );
+  return rows[0] ?? null;
+}
+
+async function findConfigByUserId(userId: string): Promise<BotConfig | null> {
+  const rows = await dbSelect<BotConfig>(
+    "bot_config",
+    "user_id,ai_provider,ai_base_url,openai_api_key,openai_model,notion_token,personal_db_id,business_db_id",
+    { user_id: `eq.${userId}` },
   );
   return rows[0] ?? null;
 }
@@ -495,11 +520,11 @@ async function sendChatReply(
       baseUrl: cfg.ai_base_url || "https://api.openai.com/v1",
       model: cfg.openai_model || "gpt-4o-mini",
     });
-    await sendMessage(cfg.telegram_bot_token, chatId, escapeHtml(reply));
+    await sendMessage(TELEGRAM_BOT_TOKEN, chatId, escapeHtml(reply));
   } catch (err) {
     console.error("answerChat error", err);
     await sendMessage(
-      cfg.telegram_bot_token,
+      TELEGRAM_BOT_TOKEN,
       chatId,
       "ဘာကူညီပေးရမလဲ ပြောပါ။ စာရင်းသိမ်းချင်ရင် amount ပါအောင်ရေးပါ။ ဥပမာ - coffee 2500",
     );
@@ -517,7 +542,7 @@ async function handleMessage(msg: TgMessage): Promise<void> {
     return;
   }
 
-  const token = cfg.telegram_bot_token;
+  const token = TELEGRAM_BOT_TOKEN;
 
   if (!text || text === "/start" || text === "/help") {
     await sendMessage(
@@ -628,18 +653,14 @@ async function handleCallback(cb: TgCallback): Promise<void> {
     { id: `eq.${pendingId}` },
   );
   const pending = rows[0];
-  const cfg = pending
-    ? await findConfigByTelegramIdentity(pending.telegram_chat_id)
-    : null;
+  const cfg = pending ? await findConfigByUserId(pending.user_id) : null;
 
   if (!pending || !cfg) {
-    if (cfg?.telegram_bot_token) {
-      await answerCallbackQuery(cfg.telegram_bot_token, cqId, "သက်တမ်းကုန်သွားပါပြီ");
-    }
+    await answerCallbackQuery(TELEGRAM_BOT_TOKEN, cqId, "သက်တမ်းကုန်သွားပါပြီ");
     return;
   }
 
-  const token = cfg.telegram_bot_token;
+  const token = TELEGRAM_BOT_TOKEN;
 
   if (pending.status !== "pending") {
     await answerCallbackQuery(token, cqId, "လုပ်ပြီးသားပါ");
@@ -770,6 +791,9 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    if (!TELEGRAM_BOT_TOKEN) {
+      throw new Error("Missing TELEGRAM_BOT_TOKEN Edge Function secret.");
+    }
     if (update.message) {
       await handleMessage(update.message);
     } else if (update.callback_query) {

@@ -18,10 +18,6 @@ interface AllowlistRow {
   linked_user_id: string | null;
 }
 
-interface BotConfigRow {
-  allowed_telegram_ids: number[] | null;
-}
-
 function getTelegramAuthEmail(telegramId: number) {
   return `tg-${telegramId}@telegram.finance-bot.local`;
 }
@@ -159,33 +155,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: config, error: configError } = await admin
-    .from("bot_config")
-    .select("allowed_telegram_ids")
-    .eq("user_id", authResult.userId)
-    .maybeSingle();
-
-  if (configError) {
-    return NextResponse.json({ error: configError.message }, { status: 500 });
-  }
-
-  const existingIds = ((config as BotConfigRow | null)?.allowed_telegram_ids ?? [])
-    .map(Number)
-    .filter(Number.isFinite);
-  const nextIds = Array.from(new Set([...existingIds, telegramId]));
-
-  const hasConfig = Boolean(config);
-  if (hasConfig) {
-    const { error: updateError } = await admin
-      .from("bot_config")
-      .update({ allowed_telegram_ids: nextIds })
-      .eq("user_id", authResult.userId);
-
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
-    }
-  }
-
   const { error: linkError } = await admin
     .from("telegram_allowlist")
     .update({ linked_user_id: authResult.userId })
@@ -197,9 +166,8 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     allowed: true,
-    linked: hasConfig,
+    linked: true,
     needsLogin: false,
-    hasConfig,
     telegramUser: verified.user,
     nextUrl: "/dashboard",
   });

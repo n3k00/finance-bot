@@ -43,7 +43,6 @@ export async function getBotConfig(): Promise<BotConfigFormInitial | null> {
     personal_db_id: config.personal_db_id,
     business_db_id: config.business_db_id,
     allowed_telegram_ids: config.allowed_telegram_ids,
-    has_telegram_bot_token: Boolean(config.telegram_bot_token),
     has_openai_api_key: Boolean(config.openai_api_key),
     has_notion_token: Boolean(config.notion_token),
     created_at: config.created_at,

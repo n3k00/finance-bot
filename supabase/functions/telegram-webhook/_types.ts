@@ -66,7 +66,6 @@ export interface ParsedPayload {
 
 export interface BotConfig {
   user_id: string;
-  telegram_bot_token: string;
   ai_provider: string;
   ai_base_url: string;
   openai_api_key: string;
@@ -74,5 +73,4 @@ export interface BotConfig {
   notion_token: string | null;
   personal_db_id: string | null;
   business_db_id: string | null;
-  allowed_telegram_ids: number[];
 }

@@ -4,11 +4,8 @@ import {
   getDatabaseSetupStatus,
 } from "@/lib/supabase/queries";
 import {
-  checkTelegramWebhook,
   listOpenAIModels,
-  registerTelegramWebhook,
   saveBotConfig,
-  setTelegramMenuButton,
 } from "@/lib/actions";
 import { AdminShell } from "../AdminShell";
 import { SetupForm } from "../setup/SetupForm";
@@ -31,7 +28,7 @@ export default async function SettingsPage({
     <AdminShell
       active="settings"
       title="Settings"
-      subtitle="Configure Telegram access, AI provider, webhook, and optional Notion sync."
+      subtitle="Configure AI provider and optional Notion sync."
       email={email}
     >
       <div className="grid max-w-7xl gap-5 xl:grid-cols-[1fr_320px]">
@@ -47,9 +44,6 @@ export default async function SettingsPage({
             initialTelegramId={params.telegram_id}
             action={saveBotConfig}
             loadModelsAction={listOpenAIModels}
-            registerWebhookAction={registerTelegramWebhook}
-            checkWebhookAction={checkTelegramWebhook}
-            setMenuButtonAction={setTelegramMenuButton}
           />
         </div>
 
@@ -62,25 +56,25 @@ export default async function SettingsPage({
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 text-xs font-semibold text-slate-700">
                 1
               </span>
-              <span>Create a Telegram bot and copy its token.</span>
+              <span>Open the Mini App from the shared Telegram bot.</span>
             </li>
             <li className="flex gap-3">
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 text-xs font-semibold text-slate-700">
                 2
               </span>
-              <span>Add the Telegram user IDs allowed to submit entries.</span>
+              <span>Admin adds allowed Telegram IDs in Supabase.</span>
             </li>
             <li className="flex gap-3">
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 text-xs font-semibold text-slate-700">
                 3
               </span>
-              <span>Select the AI provider and model used by the bot.</span>
+              <span>Select the AI provider and model used for parsing.</span>
             </li>
             <li className="flex gap-3">
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 text-xs font-semibold text-slate-700">
                 4
               </span>
-              <span>Register the hosted Supabase Edge Function webhook.</span>
+              <span>Optional: add Notion sync database IDs.</span>
             </li>
           </ol>
         </aside>

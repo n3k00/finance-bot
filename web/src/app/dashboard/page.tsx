@@ -81,11 +81,7 @@ export default async function DashboardPage() {
     .slice(0, 5);
   const maxCategory = Math.max(...categoryTotals.map(([, value]) => value), 1);
   const bankMax = Math.max(businessIn, businessOut, receivable, payable, 1);
-  const isConfigured = Boolean(
-    cfg?.has_telegram_bot_token &&
-      cfg?.has_openai_api_key &&
-      cfg?.allowed_telegram_ids.length,
-  );
+  const isConfigured = Boolean(cfg?.has_openai_api_key);
 
   return (
     <AdminShell
@@ -99,7 +95,7 @@ export default async function DashboardPage() {
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p>
-                Bot setup is incomplete. Add Telegram access and an AI API key.
+                Setup is incomplete. Add an AI provider key before the bot can parse entries.
               </p>
               <Link href="/settings" className="font-medium underline">
                 Open settings

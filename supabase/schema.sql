@@ -6,7 +6,7 @@
 -- 1) Bot config (one row per authenticated user) ----------------
 create table if not exists public.bot_config (
   user_id              uuid primary key references auth.users (id) on delete cascade,
-  telegram_bot_token   text not null,
+  telegram_bot_token   text,
   ai_provider          text not null default 'openai',
   ai_base_url          text not null default 'https://api.openai.com/v1',
   openai_api_key       text not null,
@@ -80,6 +80,8 @@ create index if not exists telegram_allowlist_linked_user_idx
 
 -- Existing projects created from older versions had Notion fields as
 -- required. Keep reruns idempotent while making Notion sync optional.
+alter table public.bot_config
+  alter column telegram_bot_token drop not null;
 alter table public.bot_config
   alter column notion_token drop not null;
 alter table public.entries_log

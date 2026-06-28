@@ -39,7 +39,6 @@ export interface ParsedPayload {
 
 export interface BotConfig {
   user_id: string;
-  telegram_bot_token: string;
   ai_provider: string;
   ai_base_url: string;
   openai_api_key: string;
@@ -60,7 +59,6 @@ export interface BotConfigFormInitial {
   personal_db_id: string | null;
   business_db_id: string | null;
   allowed_telegram_ids: number[];
-  has_telegram_bot_token: boolean;
   has_openai_api_key: boolean;
   has_notion_token: boolean;
   created_at: string;
@@ -84,7 +82,6 @@ export interface EntryLogRow {
 }
 
 export interface BotConfigInput {
-  telegram_bot_token: string;
   ai_provider: string;
   ai_base_url: string;
   openai_api_key: string;
@@ -92,7 +89,6 @@ export interface BotConfigInput {
   notion_token: string;
   personal_db_id?: string;
   business_db_id?: string;
-  allowed_telegram_ids: string; // comma separated user input
 }
 
 export interface OpenAIModelOption {

@@ -4,20 +4,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "./supabase/server";
 import type { BotConfigInput, OpenAIModelOption } from "./types";
 
-function parseTelegramIds(s: string): number[] {
-  return s
-    .split(/[\s,]+/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((t) => {
-      const n = Number(t);
-      if (!Number.isFinite(n) || n <= 0) {
-        throw new Error(`Invalid Telegram id: "${t}"`);
-      }
-      return n;
-    });
-}
-
 function normalizeBaseUrl(url: string): string {
   const trimmed = url.trim().replace(/\/+$/, "");
   if (!trimmed) return "https://api.openai.com/v1";
@@ -79,6 +65,23 @@ function getAppUrl() {
   return "http://localhost:3000";
 }
 
+function getTelegramBotToken() {
+  return (
+    process.env.TELEGRAM_BOT_TOKEN?.trim() ||
+    process.env.TELEGRAM_MINI_APP_BOT_TOKEN?.trim() ||
+    ""
+  );
+}
+
+async function requireAuthenticatedAction() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return user ? null : "Not authenticated";
+}
+
 export async function saveBotConfig(input: BotConfigInput) {
   const supabase = await createClient();
   const {
@@ -88,20 +91,9 @@ export async function saveBotConfig(input: BotConfigInput) {
     return { error: "Not authenticated" };
   }
 
-  let telegramIds: number[];
-  try {
-    telegramIds = parseTelegramIds(input.allowed_telegram_ids);
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-
-  if (!telegramIds.length) {
-    return { error: "Add at least one Telegram chat/user id." };
-  }
-
   const { data: existing, error: existingError } = await supabase
     .from("bot_config")
-    .select("telegram_bot_token,openai_api_key,notion_token,ai_provider,ai_base_url")
+    .select("openai_api_key,notion_token,ai_provider,ai_base_url")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -109,9 +101,6 @@ export async function saveBotConfig(input: BotConfigInput) {
     return { error: existingError.message };
   }
 
-  const telegramBotToken =
-    input.telegram_bot_token.trim() ||
-    ((existing?.telegram_bot_token as string | undefined) ?? "");
   const openaiApiKey =
     input.openai_api_key.trim() ||
     ((existing?.openai_api_key as string | undefined) ?? "");
@@ -119,9 +108,6 @@ export async function saveBotConfig(input: BotConfigInput) {
     input.notion_token.trim() ||
     ((existing?.notion_token as string | undefined) ?? "");
 
-  if (!telegramBotToken) {
-    return { error: "Telegram bot token is required." };
-  }
   if (!openaiApiKey) {
     return { error: "AI API key is required." };
   }
@@ -138,7 +124,6 @@ export async function saveBotConfig(input: BotConfigInput) {
 
   const row = {
     user_id: user.id,
-    telegram_bot_token: telegramBotToken,
     ai_provider: input.ai_provider?.trim() || "openai",
     ai_base_url: aiBaseUrl,
     openai_api_key: openaiApiKey,
@@ -146,7 +131,6 @@ export async function saveBotConfig(input: BotConfigInput) {
     notion_token: notionToken || null,
     personal_db_id: input.personal_db_id?.trim() || null,
     business_db_id: input.business_db_id?.trim() || null,
-    allowed_telegram_ids: telegramIds,
   };
 
   const { error } = await supabase
@@ -167,28 +151,13 @@ export async function setTelegramMenuButton(): Promise<{
   error: string | null;
   message: string | null;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { error: "Not authenticated", message: null };
-  }
+  const authError = await requireAuthenticatedAction();
+  if (authError) return { error: authError, message: null };
 
-  const { data, error } = await supabase
-    .from("bot_config")
-    .select("telegram_bot_token")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (error) {
-    return { error: error.message, message: null };
-  }
-
-  const botToken = (data?.telegram_bot_token as string | undefined) ?? "";
+  const botToken = getTelegramBotToken();
   if (!botToken) {
     return {
-      error: "Save a Telegram bot token before setting the menu button.",
+      error: "Missing TELEGRAM_BOT_TOKEN.",
       message: null,
     };
   }
@@ -332,6 +301,9 @@ export async function registerTelegramWebhook(input?: BotConfigInput): Promise<{
   error: string | null;
   message: string | null;
 }> {
+  const authError = await requireAuthenticatedAction();
+  if (authError) return { error: authError, message: null };
+
   if (input) {
     const saveResult = await saveBotConfig(input);
     if (saveResult.error) {
@@ -339,28 +311,10 @@ export async function registerTelegramWebhook(input?: BotConfigInput): Promise<{
     }
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { error: "Not authenticated", message: null };
-  }
-
-  const { data, error } = await supabase
-    .from("bot_config")
-    .select("telegram_bot_token")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (error) {
-    return { error: error.message, message: null };
-  }
-
-  const botToken = (data?.telegram_bot_token as string | undefined) ?? "";
+  const botToken = getTelegramBotToken();
   if (!botToken) {
     return {
-      error: "Save a Telegram bot token before registering the webhook.",
+      error: "Missing TELEGRAM_BOT_TOKEN.",
       message: null,
     };
   }
@@ -420,28 +374,13 @@ export async function checkTelegramWebhook(): Promise<{
   error: string | null;
   message: string | null;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { error: "Not authenticated", message: null };
-  }
+  const authError = await requireAuthenticatedAction();
+  if (authError) return { error: authError, message: null };
 
-  const { data, error } = await supabase
-    .from("bot_config")
-    .select("telegram_bot_token")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (error) {
-    return { error: error.message, message: null };
-  }
-
-  const botToken = (data?.telegram_bot_token as string | undefined) ?? "";
+  const botToken = getTelegramBotToken();
   if (!botToken) {
     return {
-      error: "Save a Telegram bot token before checking the webhook.",
+      error: "Missing TELEGRAM_BOT_TOKEN.",
       message: null,
     };
   }
