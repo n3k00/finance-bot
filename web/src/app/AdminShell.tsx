@@ -14,34 +14,45 @@ type ActivePage = "overview" | "personal" | "bank" | "reports" | "settings";
 const navItems: Array<{
   href: string;
   label: string;
+  shortLabel: string;
   active: ActivePage;
   Icon: LucideIcon;
 }> = [
   {
     href: "/dashboard",
     label: "Overview",
+    shortLabel: "Home",
     active: "overview",
     Icon: LayoutDashboard,
   },
   {
     href: "/personal",
     label: "Personal Expenses",
+    shortLabel: "Expense",
     active: "personal",
     Icon: ReceiptText,
   },
   {
     href: "/bank",
     label: "Bank Ledger",
+    shortLabel: "Bank",
     active: "bank",
     Icon: BanknoteArrowDown,
   },
   {
     href: "/reports",
     label: "Reports",
+    shortLabel: "Reports",
     active: "reports",
     Icon: ChartNoAxesColumnIncreasing,
   },
-  { href: "/settings", label: "Settings", active: "settings", Icon: Settings },
+  {
+    href: "/settings",
+    label: "Settings",
+    shortLabel: "Settings",
+    active: "settings",
+    Icon: Settings,
+  },
 ];
 
 export function AdminShell({
@@ -58,9 +69,9 @@ export function AdminShell({
   children: React.ReactNode;
 }) {
   return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="grid min-h-screen lg:grid-cols-[252px_1fr]">
-        <aside className="border-b border-slate-200 bg-white/95 text-slate-950 lg:border-b-0 lg:border-r">
+    <main className="min-h-[100dvh] bg-slate-50">
+      <div className="grid min-h-[100dvh] lg:grid-cols-[252px_1fr]">
+        <aside className="hidden border-r border-slate-200 bg-white/95 text-slate-950 lg:block">
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200 px-5 py-5">
               <Link href="/dashboard" className="block">
@@ -123,19 +134,32 @@ export function AdminShell({
           </div>
         </aside>
 
-        <section className="min-w-0">
-          <header className="border-b border-slate-200 bg-white/95 px-4 py-4 sm:px-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h1 className="text-xl font-semibold tracking-normal text-slate-950">
-                  {title}
-                </h1>
-                <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+        <section className="min-w-0 pb-20 lg:pb-0">
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 lg:static lg:py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3 lg:block">
+                <Link
+                  href="/dashboard"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-950 text-white lg:hidden"
+                  aria-label="Dashboard"
+                >
+                  <WalletCards className="h-5 w-5" aria-hidden="true" />
+                </Link>
+                <div className="min-w-0">
+                  <h1 className="truncate text-lg font-semibold tracking-normal text-slate-950 sm:text-xl">
+                    {title}
+                  </h1>
+                  <p className="mt-0.5 truncate text-xs text-slate-500 sm:text-sm lg:mt-1">
+                    {subtitle}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center justify-between gap-3 sm:justify-end">
-                <span className="truncate text-sm text-slate-500">{email}</span>
-                <form action="/logout" method="post" className="lg:hidden">
-                  <button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm">
+              <div className="flex min-w-0 items-center justify-end gap-3">
+                <span className="hidden max-w-[260px] truncate text-sm text-slate-500 sm:block">
+                  {email}
+                </span>
+                <form action="/logout" method="post">
+                  <button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
                     Logout
                   </button>
                 </form>
@@ -143,7 +167,28 @@ export function AdminShell({
             </div>
           </header>
 
-          <div className="px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+          <div className="px-3 py-4 sm:px-6 lg:px-8 lg:py-6">{children}</div>
+
+          <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-slate-200 bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom)+8px)] pt-2 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
+            {navItems.map((item) => {
+              const selected = item.active === active;
+              const Icon = item.Icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 py-1.5 text-[11px] font-medium transition ${
+                    selected
+                      ? "bg-slate-950 text-white"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                  }`}
+                >
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                  <span className="max-w-full truncate">{item.shortLabel}</span>
+                </Link>
+              );
+            })}
+          </nav>
         </section>
       </div>
     </main>

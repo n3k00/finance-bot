@@ -90,7 +90,7 @@ export default async function DashboardPage() {
       subtitle="Live totals from confirmed Telegram entries."
       email={email}
     >
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="mx-auto max-w-7xl space-y-4 sm:space-y-5">
         {!isConfigured ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -104,7 +104,7 @@ export default async function DashboardPage() {
           </div>
         ) : null}
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <section className="grid gap-2.5 sm:grid-cols-2 sm:gap-3 lg:grid-cols-6">
           <MetricCard
             className="lg:col-span-2"
             label="Personal total"
@@ -117,9 +117,9 @@ export default async function DashboardPage() {
           <MetricCard label="Payable" value={payable} accent="amber" />
         </section>
 
-        <section className="grid gap-3 lg:grid-cols-[1fr_2fr]">
+        <section className="grid gap-2.5 sm:gap-3 lg:grid-cols-[1fr_2fr]">
           <MetricCard label="Net position" value={net} accent="slate" />
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/60 sm:p-4">
             <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
               Activity
             </p>
@@ -130,7 +130,7 @@ export default async function DashboardPage() {
           </div>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-2">
+        <section className="grid gap-4 xl:grid-cols-2">
           <BarChart
             title="Personal spend by category"
             items={categoryTotals.map(([label, value]) => ({
@@ -153,7 +153,7 @@ export default async function DashboardPage() {
           />
         </section>
 
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           <RecentList title="Personal Expenses" rows={personal} kind="personal" />
           <RecentList title="Bank Account Ledger" rows={business} kind="business" />
         </div>
@@ -183,7 +183,7 @@ function MetricCard({
 
   return (
     <div
-      className={`rounded-lg border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 ${className}`}
+      className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/60 sm:p-4 ${className}`}
     >
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
@@ -191,7 +191,7 @@ function MetricCard({
         </p>
         <span className={`h-2.5 w-2.5 rounded-full ${accentClasses[accent]}`} />
       </div>
-      <p className="mt-3 font-mono text-[26px] font-semibold leading-none text-slate-950">
+      <p className="mt-3 break-words font-mono text-[22px] font-semibold leading-none text-slate-950 sm:text-[26px]">
         {(value ?? 0).toLocaleString("en-US")}
       </p>
     </div>
@@ -221,7 +221,7 @@ function BarChart({
   };
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60">
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/60 sm:p-4">
       <h2 className="text-sm font-semibold text-slate-950">{title}</h2>
       {items.length === 0 ? (
         <p className="mt-6 text-sm text-slate-500">{emptyText}</p>
@@ -339,7 +339,7 @@ function RecentList({
             return (
               <div
                 key={row.id}
-                className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3 transition hover:bg-slate-50/80"
+                className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-3 transition hover:bg-slate-50/80 sm:px-4"
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-slate-800">
