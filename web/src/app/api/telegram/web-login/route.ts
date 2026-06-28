@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
-import { authenticateAllowedTelegramUser } from "@/lib/telegramAuth";
 import {
-  verifyTelegramInitData,
-} from "@/lib/telegramMiniApp";
+  authenticateAllowedTelegramUser,
+  getTelegramBotToken,
+  type TelegramWebLoginPayload,
+  verifyTelegramWebLoginData,
+} from "@/lib/telegramAuth";
 
 interface RequestBody {
-  initData?: string;
+  telegramUser?: TelegramWebLoginPayload;
+  nextUrl?: string;
+}
+
+function safeNextUrl(nextUrl?: string) {
+  if (!nextUrl || !nextUrl.startsWith("/") || nextUrl.startsWith("//")) {
+    return "/dashboard";
+  }
+  return nextUrl;
 }
 
 export async function POST(request: Request) {
@@ -18,9 +28,9 @@ export async function POST(request: Request) {
 
   let verified;
   try {
-    verified = verifyTelegramInitData(
-      body.initData ?? "",
-      process.env.TELEGRAM_MINI_APP_BOT_TOKEN ?? "",
+    verified = verifyTelegramWebLoginData(
+      body.telegramUser ?? {},
+      getTelegramBotToken(),
     );
   } catch (error) {
     return NextResponse.json(
@@ -43,9 +53,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     allowed: true,
-    linked: true,
-    needsLogin: false,
     telegramUser: authResult.user,
-    nextUrl: "/dashboard",
+    nextUrl: safeNextUrl(body.nextUrl),
   });
 }
