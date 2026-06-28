@@ -117,6 +117,30 @@ create trigger telegram_allowlist_touch
   before update on public.telegram_allowlist
   for each row execute function public.touch_updated_at();
 
+-- Migrate older per-user Telegram ID settings into the shared-bot
+-- allowlist model. Existing explicit links are preserved.
+insert into public.telegram_allowlist (
+  telegram_user_id,
+  label,
+  is_active,
+  linked_user_id
+)
+select distinct
+  legacy.telegram_user_id,
+  'Migrated from bot_config',
+  true,
+  bc.user_id
+from public.bot_config bc
+cross join lateral unnest(bc.allowed_telegram_ids) as legacy(telegram_user_id)
+where legacy.telegram_user_id is not null
+on conflict (telegram_user_id) do update
+set
+  is_active = true,
+  linked_user_id = coalesce(
+    public.telegram_allowlist.linked_user_id,
+    excluded.linked_user_id
+  );
+
 -- 5) Row Level Security -----------------------------------------
 alter table public.bot_config       enable row level security;
 alter table public.pending_entries  enable row level security;
