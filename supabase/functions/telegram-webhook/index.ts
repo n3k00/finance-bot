@@ -28,6 +28,10 @@ const TELEGRAM_BOT_TOKEN =
   Deno.env.get("TELEGRAM_BOT_TOKEN") ??
   Deno.env.get("TELEGRAM_MINI_APP_BOT_TOKEN") ??
   "";
+const SHARED_AI_API_KEY = Deno.env.get("SHARED_AI_API_KEY") ?? "";
+const SHARED_AI_BASE_URL =
+  Deno.env.get("SHARED_AI_BASE_URL") ?? "https://api.openai.com/v1";
+const SHARED_AI_MODEL = Deno.env.get("SHARED_AI_MODEL") ?? "gpt-4o-mini";
 
 const DEFAULT_PERSONAL_CATEGORIES = [
   "Food",
@@ -525,16 +529,29 @@ function parseIncomingText(
   return { book: "personal", body: text };
 }
 
+function aiSettings(cfg: BotConfig) {
+  return {
+    key: cfg.openai_api_key?.trim() || SHARED_AI_API_KEY.trim(),
+    baseUrl: cfg.openai_api_key?.trim()
+      ? cfg.ai_base_url || SHARED_AI_BASE_URL
+      : SHARED_AI_BASE_URL,
+    model: cfg.openai_api_key?.trim()
+      ? cfg.openai_model || SHARED_AI_MODEL
+      : SHARED_AI_MODEL,
+  };
+}
+
 async function sendChatReply(
   cfg: BotConfig,
   chatId: number,
   text: string,
 ): Promise<void> {
-  if (!cfg.openai_api_key) {
+  const ai = aiSettings(cfg);
+  if (!ai.key) {
     await sendMessage(
       TELEGRAM_BOT_TOKEN,
       chatId,
-      "AI key မရှိသေးလို့ free rule parser နဲ့ စာရင်းမှတ်တာနဲ့ report မေးတာတွေကိုပဲ ဖြေပေးနိုင်ပါတယ်။ ဥပမာ - မုန့် 2000, /m ကိုအောင် kpay ဝင် 100000",
+      "AI assistant မဖွင့်ထားသေးလို့ rule parser နဲ့ စာရင်းမှတ်တာနဲ့ report မေးတာတွေကိုပဲ ဖြေပေးနိုင်ပါတယ်။ ဥပမာ - မုန့် 2000, /m ကိုအောင် kpay ဝင် 100000",
     );
     return;
   }
@@ -542,9 +559,9 @@ async function sendChatReply(
   try {
     const reply = await answerChat({
       text,
-      aiKey: cfg.openai_api_key,
-      baseUrl: cfg.ai_base_url || "https://api.openai.com/v1",
-      model: cfg.openai_model || "gpt-4o-mini",
+      aiKey: ai.key,
+      baseUrl: ai.baseUrl,
+      model: ai.model,
     });
     await sendMessage(TELEGRAM_BOT_TOKEN, chatId, escapeHtml(reply));
   } catch (err) {
@@ -647,12 +664,13 @@ async function handleMessage(msg: TgMessage): Promise<void> {
 
   let parsed: ParsedPayload;
   try {
+    const ai = aiSettings(cfg);
     parsed = await parseMessage({
       book,
       text: body,
-      aiKey: cfg.openai_api_key,
-      baseUrl: cfg.ai_base_url || "https://api.openai.com/v1",
-      model: cfg.openai_model || "gpt-4o-mini",
+      aiKey: ai.key,
+      baseUrl: ai.baseUrl,
+      model: ai.model,
       personalCategories: personalCategories(cfg),
     });
   } catch (err) {

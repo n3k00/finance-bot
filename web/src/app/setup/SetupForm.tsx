@@ -42,15 +42,6 @@ const EMPTY: BotConfigInput = {
   business_db_id: "",
 };
 
-const XIAOMI_MIMO_MODELS: OpenAIModelOption[] = [
-  { id: "mimo-v2.5-pro", created: 6, owned_by: "xiaomi-mimo" },
-  { id: "mimo-v2.5-pro-ultraspeed", created: 5, owned_by: "xiaomi-mimo" },
-  { id: "mimo-v2.5", created: 4, owned_by: "xiaomi-mimo" },
-  { id: "mimo-v2.5-tts", created: 3, owned_by: "xiaomi-mimo" },
-  { id: "mimo-v2.5-tts-voiceclone", created: 2, owned_by: "xiaomi-mimo" },
-  { id: "mimo-v2.5-asr", created: 1, owned_by: "xiaomi-mimo" },
-];
-
 function toInput(
   c: BotConfigFormInitial | null,
 ): BotConfigInput {
@@ -68,68 +59,13 @@ function toInput(
   };
 }
 
-function isXiaomiMiMo(provider?: string, baseUrl?: string) {
-  return (
-    provider === "xiaomi_mimo" ||
-    (baseUrl ?? "").toLowerCase().includes("xiaomimimo.com")
-  );
-}
-
-function providerFallbackModels(
-  provider?: string,
-  baseUrl?: string,
-): OpenAIModelOption[] {
-  return isXiaomiMiMo(provider, baseUrl) ? XIAOMI_MIMO_MODELS : [];
-}
-
-function mergeModelOptions(
-  models: OpenAIModelOption[],
-  fallback: OpenAIModelOption[],
-) {
-  const byId = new Map<string, OpenAIModelOption>();
-  for (const model of [...models, ...fallback]) {
-    if (!byId.has(model.id)) byId.set(model.id, model);
-  }
-  return Array.from(byId.values()).sort(
-    (a, b) => b.created - a.created || a.id.localeCompare(b.id),
-  );
-}
-
 export function SetupForm({
   initial,
   initialTelegramId,
   action,
-  loadModelsAction,
 }: Props) {
   const [form, setForm] = useState<BotConfigInput>(() => toInput(initial));
   const [saved, setSaved] = useState(false);
-  const [modelOptions, setModelOptions] = useState<OpenAIModelOption[]>(() =>
-    providerFallbackModels(initial?.ai_provider, initial?.ai_base_url),
-  );
-  const [loadingModels, setLoadingModels] = useState(false);
-  const [modelError, setModelError] = useState<string | null>(null);
-  const providerOptions = [
-    {
-      value: "openai",
-      label: "OpenAI",
-      baseUrl: "https://api.openai.com/v1",
-    },
-    {
-      value: "openrouter",
-      label: "OpenRouter",
-      baseUrl: "https://openrouter.ai/api/v1",
-    },
-    {
-      value: "xiaomi_mimo",
-      label: "Xiaomi MiMo",
-      baseUrl: "https://api.xiaomimimo.com/v1",
-    },
-    {
-      value: "custom",
-      label: "Custom OpenAI-compatible",
-      baseUrl: "",
-    },
-  ];
 
   async function onSubmit(
     _prev: { error: string | null } | null,
@@ -209,32 +145,6 @@ export function SetupForm({
     );
   }
 
-  async function loadModels() {
-    setLoadingModels(true);
-    setModelError(null);
-    const res = await loadModelsAction({
-      openai_api_key: form.openai_api_key,
-      ai_base_url: form.ai_base_url,
-    });
-    if (res.error) {
-      setModelError(res.error);
-      setModelOptions(providerFallbackModels(form.ai_provider, form.ai_base_url));
-    } else {
-      const models = mergeModelOptions(
-        res.models,
-        providerFallbackModels(form.ai_provider, form.ai_base_url),
-      );
-      setModelOptions(models);
-      if (
-        models.length > 0 &&
-        !models.some((model) => model.id === form.openai_model)
-      ) {
-        update("openai_model", models[0].id);
-      }
-    }
-    setLoadingModels(false);
-  }
-
   return (
     <form
       action={formAction}
@@ -252,111 +162,15 @@ export function SetupForm({
         </div>
       </Section>
 
-      <Section title="AI parser" description="Provider, key, endpoint, and model.">
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">
-              Provider
-            </span>
-            <select
-              name="ai_provider"
-              value={form.ai_provider}
-              onChange={(e) => {
-                const selected = providerOptions.find(
-                  (option) => option.value === e.target.value,
-                );
-                update("ai_provider", e.target.value);
-                if (selected?.baseUrl) {
-                  update("ai_base_url", selected.baseUrl);
-                }
-                const fallback = providerFallbackModels(
-                  selected?.value,
-                  selected?.baseUrl,
-                );
-                setModelOptions(fallback);
-                if (
-                  fallback.length > 0 &&
-                  !fallback.some((model) => model.id === form.openai_model)
-                ) {
-                  update("openai_model", fallback[0].id);
-                }
-              }}
-              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-4 focus:ring-slate-100"
-            >
-              {providerOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {field("ai_base_url", "API base URL", {
-            required: true,
-            placeholder: "https://api.openai.com/v1",
-            help: "Must expose OpenAI-compatible /chat/completions and /models endpoints.",
-          })}
-        </div>
+      <Section title="Parser" description="Shared AI is managed by the app admin.">
+        <input type="hidden" name="ai_provider" value={form.ai_provider} />
+        <input type="hidden" name="ai_base_url" value={form.ai_base_url} />
+        <input type="hidden" name="openai_api_key" value="" />
+        <input type="hidden" name="openai_model" value={form.openai_model} />
 
-        {field("openai_api_key", "AI API key", {
-          type: "password",
-          placeholder: initial?.has_openai_api_key
-            ? "Saved key hidden"
-            : "sk-...",
-          status: initial?.has_openai_api_key ? "Saved" : undefined,
-          help: initial?.has_openai_api_key
-            ? "Configured. Leave blank to keep the saved key."
-            : "Optional. Simple entries use the built-in rule parser; AI is only used as fallback.",
-        })}
-        <div>
-          <div className="mb-1.5 flex items-center justify-between gap-3">
-            <label
-              htmlFor="openai_model"
-              className="text-sm font-medium text-slate-700"
-            >
-              AI model
-            </label>
-            <button
-              type="button"
-              onClick={loadModels}
-              disabled={loadingModels}
-              className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-55"
-            >
-              {loadingModels ? "Loading..." : "Load models"}
-            </button>
-          </div>
-          {modelOptions.length > 0 ? (
-            <select
-              id="openai_model"
-              name="openai_model"
-              value={form.openai_model ?? modelOptions[0].id}
-              onChange={(e) => update("openai_model", e.target.value)}
-              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-4 focus:ring-slate-100"
-            >
-              {modelOptions.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.id}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              id="openai_model"
-              name="openai_model"
-              value={form.openai_model ?? "gpt-4o-mini"}
-              onChange={(e) => update("openai_model", e.target.value)}
-              placeholder="gpt-4o-mini or provider/model-id"
-              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-4 focus:ring-slate-100"
-            />
-          )}
-          <span className="mt-1.5 block text-xs leading-5 text-slate-500">
-            Loads models from the selected provider&apos;s /models endpoint. For
-            custom providers, you can also type a model ID directly.
-          </span>
-          {modelError ? (
-            <p className="mt-1.5 text-xs font-medium text-red-700">
-              {modelError}
-            </p>
-          ) : null}
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+          AI parsing and chat replies use the shared admin key. Users do not
+          need to enter provider keys or choose models.
         </div>
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-slate-700">
