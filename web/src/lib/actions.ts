@@ -222,6 +222,48 @@ async function setTelegramMenuButtonForToken(botToken: string): Promise<{
   };
 }
 
+async function setTelegramBotCommandsForToken(botToken: string): Promise<{
+  error: string | null;
+  message: string | null;
+}> {
+  const res = await fetch(
+    `https://api.telegram.org/bot${botToken}/setMyCommands`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        commands: [
+          { command: "help", description: "စာရင်းမှတ်နည်း manual" },
+          { command: "p", description: "ကိုယ်ရေးသုံးစာရင်း မှတ်ရန်" },
+          { command: "m", description: "ငွေအဝင်အထွက်စာရင်း မှတ်ရန်" },
+          { command: "in", description: "ငွေအဝင်စာရင်း မှတ်ရန်" },
+          { command: "out", description: "ငွေအထွက်စာရင်း မှတ်ရန်" },
+          { command: "report", description: "စာရင်းချုပ် ကြည့်ရန်" },
+          { command: "table", description: "ဇယားပုံစံ စာရင်းချုပ်" },
+        ],
+      }),
+      cache: "no-store",
+    },
+  );
+
+  const json = (await res.json()) as {
+    ok?: boolean;
+    description?: string;
+  };
+
+  if (!res.ok || !json.ok) {
+    return {
+      error: json.description ?? `Telegram setMyCommands failed (${res.status}).`,
+      message: null,
+    };
+  }
+
+  return {
+    error: null,
+    message: "Telegram command menu updated.",
+  };
+}
+
 export async function listOpenAIModels(input: {
   openai_api_key?: string;
   ai_base_url?: string;
@@ -373,18 +415,26 @@ export async function registerTelegramWebhook(input?: BotConfigInput): Promise<{
   }
 
   const menuResult = await setTelegramMenuButtonForToken(botToken);
+  const commandResult = await setTelegramBotCommandsForToken(botToken);
+  const extraMessages = [
+    menuResult.error ? `Menu button not updated: ${menuResult.error}` : menuResult.message,
+    commandResult.error
+      ? `Command menu not updated: ${commandResult.error}`
+      : commandResult.message,
+  ].filter(Boolean);
+
   if (menuResult.error) {
     return {
       error: null,
-      message: `Webhook registered: ${webhookUrl}\nMenu button not updated: ${menuResult.error}`,
+      message: `Webhook registered: ${webhookUrl}\n${extraMessages.join("\n")}`,
     };
   }
 
   return {
     error: null,
     message: secret
-      ? `Webhook registered: ${webhookUrl}\n${menuResult.message}`
-      : `Webhook registered without a secret token: ${webhookUrl}\n${menuResult.message}`,
+      ? `Webhook registered: ${webhookUrl}\n${extraMessages.join("\n")}`
+      : `Webhook registered without a secret token: ${webhookUrl}\n${extraMessages.join("\n")}`,
   };
 }
 
