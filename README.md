@@ -1,187 +1,208 @@
-# Telegram → AI → Notion Expense Tracker
+# Finance Bot
 
-Log personal expenses and business cashflow from Telegram. Send a short
-message → AI parses it → you confirm → it lands in Notion. Web dashboard
-shows recent entries and totals.
+Invite-only Telegram finance tracker for personal expenses and bank account ledger entries.
 
+Users send short messages to a shared Telegram bot, confirm the parsed result, and review saved data in a Next.js dashboard. Supabase is the primary database. Notion sync is optional.
+
+## Current Stack
+
+- Web app: Next.js 16, React 19, TypeScript, Tailwind CSS
+- Hosting: Vercel
+- Auth: Supabase Auth
+- Database: Supabase Postgres
+- Bot runtime: Supabase Edge Function
+- Telegram auth: Mini App `initData` plus Telegram OpenID Connect for website login
+- AI: admin-managed shared OpenAI-compatible API key with rule-based parser first
+- Optional integration: Notion
+
+## Production References
+
+- Web: `https://finance-bot-pi.vercel.app`
+- Supabase project ref: `tnpjpojkiwmqrliynebd`
+- Edge Function: `telegram-webhook`
+- Mini App route: `/telegram`
+- Login route: `/login`
+
+## How It Works
+
+```text
+Telegram message
+  -> Supabase Edge Function
+  -> rule parser first
+  -> shared AI fallback if needed
+  -> Telegram confirmation card
+  -> entries_log in Supabase
+  -> optional Notion sync
+  -> dashboard/reports
 ```
-┌───────────┐    ┌────────────────────────────┐    ┌─────────┐
-│ Telegram  │ ─▶ │ Supabase Edge Function     │ ─▶ │ Notion  │
-│  /p 3500  │    │  parse (OpenAI) + confirm  │    │  DB     │
-└───────────┘    └────────────────────────────┘    └─────────┘
-                          │
-                          ▼
-                   ┌─────────────────┐
-                   │ entries_log     │ ◀── Next.js dashboard
-                   └─────────────────┘
-```
 
-## Stack
+Access is controlled by `telegram_allowlist`. A user must be in the allowlist before they can use the Mini App or website login.
 
-- **Web**: Next.js 16 + TypeScript + Tailwind (App Router)
-- **Bot runtime**: Supabase Edge Functions (Deno)
-- **AI parser**: OpenAI `gpt-4o-mini` (structured JSON output)
-- **Database**: Notion (two databases — Personal & Business)
-- **Config storage**: Supabase Postgres (`bot_config`, `pending_entries`, `entries_log`)
-- **Auth**: Supabase Auth (email + password, or magic link)
+## Repository Layout
 
-## Repo layout
-
-```
+```text
 .
-├── web/                              # Next.js app (dashboard + setup)
-│   ├── src/app/
-│   │   ├── login/                    # auth
-│   │   ├── setup/                    # bot config form (server action)
-│   │   ├── dashboard/                # recent entries + totals
-│   │   ├── auth/callback/route.ts    # magic-link callback
-│   │   └── logout/route.ts
-│   └── src/lib/
-│       ├── supabase/{client,server,queries}.ts
-│       ├── actions.ts                # saveBotConfig server action
-│       └── types.ts
-└── supabase/
-    ├── schema.sql                    # run this in Supabase SQL editor
-    └── functions/telegram-webhook/   # Deno Edge Function
-        ├── index.ts                  # webhook entrypoint
-        ├── _parse.ts                 # OpenAI prompts + JSON parser
-        ├── _telegram.ts              # Telegram Bot API helpers
-        ├── _notion.ts                # Notion API helpers
-        └── _types.ts
+├── README.md
+├── PROJECT_CONTEXT.md
+├── ARCHITECTURE.md
+├── DATABASE.md
+├── TASK_LOG.md
+├── supabase/
+│   ├── config.toml
+│   ├── schema.sql
+│   └── functions/
+│       └── telegram-webhook/
+│           ├── index.ts
+│           ├── _parse.ts
+│           ├── _chat.ts
+│           ├── _telegram.ts
+│           ├── _notion.ts
+│           └── _types.ts
+└── web/
+    ├── package.json
+    ├── .env.local.example
+    └── src/
+        ├── app/
+        └── lib/
 ```
 
-## Setup
+## Local Development
 
-### 1. Supabase project
-
-1. Create a project at <https://supabase.com> — note the **Project URL**, **anon key**, and **service role key**.
-2. Open **SQL Editor** → paste `supabase/schema.sql` → Run.
-3. Open **Authentication → Providers → Email** → make sure **Email** and **Allow new users to sign up** are enabled.
-
-### 2. Telegram bot
-
-1. Open Telegram, message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the **bot token**.
-2. Message [@userinfobot](https://t.me/userinfobot) → copy **your user id** (numeric).
-
-### 3. Notion integration
-
-1. Go to <https://www.notion.so/my-integrations> → **Create new integration** → copy the **Internal Integration Secret**.
-2. Create two databases in Notion (Personal, Business). Add these properties:
-
-   **Personal**
-   | Property | Type |
-   |----------|------|
-   | Name | Title |
-   | Date | Date |
-   | Type | Select (`Expense`, `Income`, `Transfer`) |
-   | Category | Select (`Food`, `Drink`, `Transport`, `Shopping`, `Bills`, `Entertainment`, `Health`, `Family Support`, `Education`, `Other`) |
-   | Description | Rich text |
-   | Amount | Number |
-   | Currency | Select (`MMK`, `USD`, `THB`) |
-   | Payment Method | Select (`Cash`, `Bank`, `KPay`, `Wave`, `Card`, `Other`) |
-   | Note | Rich text |
-
-   **Business**
-   | Property | Type |
-   |----------|------|
-   | Name | Title |
-   | Date | Date |
-   | Direction | Select (`In`, `Out`, `Receivable`, `Payable`) |
-   | Person | Rich text |
-   | Amount | Number |
-   | Currency | Select (`MMK`, `USD`, `THB`, `USDT`) |
-   | Payment Method | Select (`cash`, `bank_transfer`, `kpay`, `wave`, `binance`, `other`) |
-   | Purpose | Rich text |
-   | Status | Select (`Paid`, `Received`, `Pending`, `Partial`) |
-   | Note | Rich text |
-
-3. Open each database → **•••** → **Connections** → add the integration.
-4. Copy the database id from the URL: `notion.so/<DATABASE_ID>?v=...` → the 32-char hex string.
-
-### 4. OpenAI key
-
-Create a key at <https://platform.openai.com/api-keys> (`gpt-4o-mini` is enough). Don't reuse the opencode subscription key — get your own.
-
-### 5. Deploy the Edge Function
-
-Install the Supabase CLI:
-
-```bash
-npm install -g supabase
-supabase login
-supabase link --project-ref <your-project-ref>
-```
-
-Deploy and set secrets:
-
-```bash
-supabase functions deploy telegram-webhook --no-verify-jwt
-
-supabase secrets set \
-  SUPABASE_URL=https://<your-project>.supabase.co \
-  SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
-  WEBHOOK_SECRET=<any-random-string-you-pick>
-```
-
-`--no-verify-jwt` is required because Telegram does not send a Supabase JWT.
-
-### 6. Register the Telegram webhook
-
-```bash
-curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
-  --data-urlencode "url=https://<your-project>.supabase.co/functions/v1/telegram-webhook" \
-  --data-urlencode "secret_token=<WEBHOOK_SECRET>"
-```
-
-Verify:
-
-```bash
-curl "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"
-```
-
-### 7. Run the web app
-
-```bash
+```powershell
 cd web
-cp .env.local.example .env.local
-# fill in NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY
 npm install
 npm run dev
 ```
 
-Open <http://localhost:3000> → **Sign up** → go to **Setup** → paste bot token, OpenAI key, Notion token, both database ids, and your Telegram user id → **Save config**.
+Open:
 
-### 8. Try it
-
-In Telegram, message your bot:
-
-```
-/p မနက်စာ 3500
-/p ကော်ဖီ 2500
-/b ကိုအောင်ကို 500000 လွှဲ ပစ္စည်းဖိုး
-/b ABC shop 850000 ကျန်
+```text
+http://localhost:3000
 ```
 
-The bot replies with a confirmation card → tap **✅ Confirm** → entry is saved to Notion and shows up on the dashboard.
+Useful checks:
 
-## Deploy the web app
+```powershell
+cd web
+npm run lint
+npm run build
+```
 
-Push the `web/` folder to GitHub and import it in Vercel. Set the env vars:
+Edge Function type check:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+```powershell
+deno check supabase\functions\telegram-webhook\index.ts
+```
+
+## Required Web Environment Variables
+
+Set in `web/.env.local` for local dev and in Vercel for hosted web:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SITE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_MINI_APP_BOT_TOKEN=
+TELEGRAM_OIDC_CLIENT_ID=
+TELEGRAM_OIDC_CLIENT_SECRET=
+WEBHOOK_SECRET=
+```
+
+Do not expose service role keys or bot tokens as `NEXT_PUBLIC_*`.
+
+## Required Edge Function Secrets
+
+Set in Supabase Edge Function secrets:
+
+```text
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+WEBHOOK_SECRET=
+TELEGRAM_BOT_TOKEN=
+WEB_APP_URL=
+SHARED_AI_API_KEY=
+SHARED_AI_BASE_URL=
+SHARED_AI_MODEL=
+```
+
+The shared AI key is admin-managed. Normal users do not enter API keys.
+
+## Deploy
+
+Deploy Edge Function:
+
+```powershell
+npx supabase functions deploy telegram-webhook --project-ref tnpjpojkiwmqrliynebd --no-verify-jwt
+```
+
+Deploy web:
+
+```powershell
+cd web
+npx vercel --prod --yes
+```
+
+## Telegram Setup
+
+The shared Telegram bot uses:
+
+- Webhook: Supabase Edge Function URL
+- Chat menu button: opens `/telegram`
+- Bot command menu:
+  - `/help`
+  - `/p`
+  - `/m`
+  - `/in`
+  - `/out`
+  - `/report`
+  - `/table`
+
+`/?` is also supported as a help alias but cannot be shown in Telegram's official command menu.
+
+The command menu is updated by `setMyCommands` in `web/src/lib/actions.ts`.
+
+## User Commands
+
+Personal entries:
+
+```text
+မုန့် 2000
+/p coffee 2500
+ဒီနေ့ ဆေးလိပ်ဝယ်တာ 5000 ကုန်တယ်
+```
+
+Bank ledger:
+
+```text
+/m ကိုအောင် kpay ဝင် 100000
+/in ကိုအောင် kpay 100000
+/out taxi cash 280000
+```
+
+Reports:
+
+```text
+/report
+/report last month
+/table ဒီလ
+ဒီလ ငွေသုံးတာ ဘယ်လောက်ရှိပြီလဲ
+```
+
+## Docs
+
+Read these before larger changes:
+
+- `PROJECT_CONTEXT.md` - product state, decisions, and operating notes
+- `ARCHITECTURE.md` - runtime architecture and deployment flow
+- `DATABASE.md` - schema and data model
+- `TASK_LOG.md` - recent changes and follow-ups
 
 ## Notes
 
-- Business money and personal money are kept in **separate Notion databases**, separate tables, and separate prefixes (`/p` vs `/b`). Don't mix.
-- Every entry goes through a **confirm step** before Notion insert — wrong parses never silently land in your ledger.
-- The web dashboard reads from `entries_log` (a Supabase mirror), not from Notion directly, so it stays fast even with thousands of rows.
-- Pending entries older than ~24h can be cleaned up with a scheduled function (not included yet).
-
-## Roadmap (not implemented)
-
-- Monthly report commands (`/report personal`, `/report business`)
-- Edit-before-confirm flow
-- Auto-cleanup of expired pending entries
-- Charts on the dashboard
-- Partial payment handling (`XYZ က 400000 ပေးလိုက်ပြီ ကျန် 100000`)
+- Supabase is the source of truth.
+- Notion is optional and should not block Supabase saving.
+- Every entry must be confirmed before it is saved.
+- Keep `supabase/schema.sql` in sync with hosted DB changes.
+- Use `npx supabase db query --linked` for direct hosted SQL changes.
