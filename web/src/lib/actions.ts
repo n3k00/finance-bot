@@ -5,6 +5,22 @@ import { getAppUrl } from "./siteUrl";
 import { createClient } from "./supabase/server";
 import type { BotConfigInput, OpenAIModelOption } from "./types";
 
+const DEFAULT_PERSONAL_CATEGORIES = [
+  "Food",
+  "Drink",
+  "Transport",
+  "Shopping",
+  "Bills",
+  "Entertainment",
+  "Health",
+  "Family Support",
+  "Education",
+  "Tobacco",
+  "Donation",
+  "Gift",
+  "Other",
+];
+
 function normalizeBaseUrl(url: string): string {
   const trimmed = url.trim().replace(/\/+$/, "");
   if (!trimmed) return "https://api.openai.com/v1";
@@ -61,6 +77,22 @@ function getTelegramBotToken() {
   );
 }
 
+function normalizeCategories(categories: string[]) {
+  const seen = new Set<string>();
+  const normalized = categories
+    .map((category) => category.trim())
+    .filter(Boolean)
+    .filter((category) => {
+      const key = category.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 30);
+
+  return normalized.length > 0 ? normalized : DEFAULT_PERSONAL_CATEGORIES;
+}
+
 async function requireAuthenticatedAction() {
   const supabase = await createClient();
   const {
@@ -91,14 +123,11 @@ export async function saveBotConfig(input: BotConfigInput) {
 
   const openaiApiKey =
     input.openai_api_key.trim() ||
-    ((existing?.openai_api_key as string | undefined) ?? "");
+    ((existing?.openai_api_key as string | undefined) ?? "") ||
+    null;
   const notionToken =
     input.notion_token.trim() ||
     ((existing?.notion_token as string | undefined) ?? "");
-
-  if (!openaiApiKey) {
-    return { error: "AI API key is required." };
-  }
 
   let aiBaseUrl: string;
   try {
@@ -116,6 +145,7 @@ export async function saveBotConfig(input: BotConfigInput) {
     ai_base_url: aiBaseUrl,
     openai_api_key: openaiApiKey,
     openai_model: (input.openai_model ?? "gpt-4o-mini").trim() || "gpt-4o-mini",
+    personal_categories: normalizeCategories(input.personal_categories ?? []),
     notion_token: notionToken || null,
     personal_db_id: input.personal_db_id?.trim() || null,
     business_db_id: input.business_db_id?.trim() || null,

@@ -16,14 +16,14 @@ Examples:
 
 Rules:
 - "type" must be one of: "Expense", "Income", "Transfer"
-- "category" must be one of: "Food", "Drink", "Transport", "Shopping", "Bills", "Entertainment", "Health", "Family Support", "Education", "Other"
+- "category" must be one of the categories provided by the user prompt
 - "payment_method" must be one of: "Cash", "Bank", "KPay", "Wave", "Card", "Other"
 - Giving money to family/relative -> type "Transfer", category "Family Support"
 - Receiving salary / income -> type "Income"
 - Default payment_method is "Cash" if not stated
 - "currency" defaults to "MMK"; use "USD" or "THB" only if explicitly mentioned
 - "date" must be today's date in YYYY-MM-DD unless the message says otherwise
-- "description" is the original item/person/purpose text, stripped of the amount
+- "description" is the user's caption/subject, stripped only of amount/date/payment words and trailing action words. Do not summarize or shorten the caption.
 - "note" is empty unless there is extra context
 
 Respond with ONLY a single minified JSON object. No markdown, no commentary.`;
@@ -64,9 +64,9 @@ Rules:
 
 Respond with ONLY a single minified JSON object. No markdown, no commentary.`;
 
-function userPromptPersonal(text: string): string {
+function userPromptPersonal(text: string, categories: string[]): string {
   const today = new Date().toISOString().slice(0, 10);
-  return `Today is ${today}.\nMessage: """${text}"""\nOutput JSON now.`;
+  return `Today is ${today}.\nAllowed categories: ${categories.join(", ")}.\nMessage: """${text}"""\nOutput JSON now.`;
 }
 
 function userPromptBusiness(text: string): string {
@@ -98,6 +98,9 @@ const PERSONAL_CATEGORIES = [
   "Health",
   "Family Support",
   "Education",
+  "Tobacco",
+  "Donation",
+  "Gift",
   "Other",
 ] as const;
 const PERSONAL_METHODS = ["Cash", "Bank", "KPay", "Wave", "Card", "Other"] as const;
@@ -153,6 +156,15 @@ function assertEnumField<T extends readonly string[]>(
   return value;
 }
 
+function enumFieldFromList(
+  obj: Record<string, unknown>,
+  field: string,
+  allowed: string[],
+): string {
+  const value = assertStringField(obj, field);
+  return allowed.includes(value) ? value : "Other";
+}
+
 function numericField(
   obj: Record<string, unknown>,
   field: string,
@@ -179,17 +191,182 @@ function assertDate(obj: Record<string, unknown>): string {
   return value;
 }
 
-function validatePersonalEntry(value: unknown): PersonalEntry {
+function validatePersonalEntry(value: unknown, categories: string[]): PersonalEntry {
   assertRecord(value);
   return {
     date: assertDate(value),
     type: assertEnumField(value, "type", PERSONAL_TYPES),
-    category: assertEnumField(value, "category", PERSONAL_CATEGORIES),
+    category: enumFieldFromList(value, "category", categories),
     description: assertStringField(value, "description"),
     amount: assertAmount(value),
     currency: assertEnumField(value, "currency", PERSONAL_CURRENCIES),
     payment_method: assertEnumField(value, "payment_method", PERSONAL_METHODS),
     note: assertStringField(value, "note"),
+  };
+}
+
+const MM_DIGITS: Record<string, string> = {
+  "၀": "0",
+  "၁": "1",
+  "၂": "2",
+  "၃": "3",
+  "၄": "4",
+  "၅": "5",
+  "၆": "6",
+  "၇": "7",
+  "၈": "8",
+  "၉": "9",
+};
+
+function normalizeDigits(text: string) {
+  return text.replace(/[၀-၉]/g, (digit) => MM_DIGITS[digit] ?? digit);
+}
+
+function todayInMyanmar() {
+  const shifted = new Date(Date.now() + 6.5 * 60 * 60 * 1000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function dateFromText(text: string) {
+  const today = new Date(`${todayInMyanmar()}T00:00:00Z`);
+  if (text.includes("မနေ့") || text.toLowerCase().includes("yesterday")) {
+    today.setUTCDate(today.getUTCDate() - 1);
+  }
+  return today.toISOString().slice(0, 10);
+}
+
+function findAmount(text: string) {
+  const normalized = normalizeDigits(text);
+  const match = /(?:^|[^\d])(\d[\d,]*(?:\.\d+)?)(?:\s*(?:ကျပ်|ks|mmk|baht|thb|usd|usdt|ဒေါ်လာ))?/i.exec(
+    normalized,
+  );
+  if (!match) return null;
+  const amount = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? { amount, raw: match[1] } : null;
+}
+
+function pickCategory(text: string, categories: string[]) {
+  const lower = text.toLowerCase();
+  const hasCategory = (category: string) => categories.includes(category);
+  const rules: Array<{ category: string; words: string[] }> = [
+    { category: "Tobacco", words: ["ဆေးလိပ်", "စီးကရက်", "cigarette", "smoke"] },
+    { category: "Food", words: ["မုန့်", "မုန့်", "ထမင်း", "စား", "ဟင်း", "food", "snack"] },
+    { category: "Drink", words: ["coffee", "ကော်ဖီ", "လက်ဖက်ရည်", "ရေသန့်", "drink"] },
+    { category: "Transport", words: ["ဆီ", "taxi", "grab", "ကားခ", "bus", "transport"] },
+    { category: "Bills", words: ["ဘေလ်", "ဖုန်းဘေ", "မီး", "internet", "wifi", "bill"] },
+    { category: "Health", words: ["ဆေး", "ဆေးခန်း", "hospital", "clinic"] },
+    { category: "Family Support", words: ["အမေ", "အဖေ", "မိဘ", "ညီ", "အစ်ကို", "အစ်မ"] },
+    { category: "Donation", words: ["အလှူ", "donation", "လှူ"] },
+    { category: "Gift", words: ["လက်ဆောင်", "gift"] },
+    { category: "Shopping", words: ["ဝယ်", "shopping", "အင်္ကျီ", "ဖိနပ်"] },
+  ];
+  for (const rule of rules) {
+    if (!hasCategory(rule.category)) continue;
+    if (rule.words.some((word) => lower.includes(word.toLowerCase()))) {
+      return rule.category;
+    }
+  }
+  return hasCategory("Other") ? "Other" : categories[0] ?? "Other";
+}
+
+function paymentMethodFromText(text: string): PersonalEntry["payment_method"] {
+  const lower = text.toLowerCase();
+  if (lower.includes("kpay") || lower.includes("k pay")) return "KPay";
+  if (lower.includes("wave")) return "Wave";
+  if (lower.includes("card")) return "Card";
+  if (lower.includes("bank") || lower.includes("kbz") || lower.includes("aya")) return "Bank";
+  return "Cash";
+}
+
+function personalTypeFromText(text: string): PersonalEntry["type"] {
+  const lower = text.toLowerCase();
+  if (text.includes("လစာ") || text.includes("ဝင်ငွေ") || /\bincome\b/.test(lower)) {
+    return "Income";
+  }
+  if (text.includes("ပေး") && /(အမေ|အဖေ|မိဘ|ညီ|အစ်ကို|အစ်မ)/.test(text)) {
+    return "Transfer";
+  }
+  return "Expense";
+}
+
+function cleanPersonalDescription(text: string, amountRaw: string) {
+  let description = normalizeDigits(text);
+  description = description.replace(amountRaw, " ");
+  description = description.replace(/\b(today|yesterday)\b/gi, " ");
+  description = description.replace(/ဒီနေ့|ယနေ့|မနေ့က|မနေ့|ကျပ်|ks|mmk|kyats?/gi, " ");
+  description = description.replace(/\b(kpay|k pay|wave|cash|bank|card|kbz|aya)\b/gi, " ");
+  description = description.replace(/(ကုန်တယ်|ကုန်|သုံးတယ်|သုံး|ဝင်တယ်|ဝင်|ပေးတယ်|ပေး)\s*$/gi, " ");
+  description = description.replace(/\s+/g, " ").trim();
+  return description || "Other";
+}
+
+function ruleParsePersonal(text: string, categories: string[]): PersonalEntry | null {
+  const found = findAmount(text);
+  if (!found) return null;
+  return {
+    date: dateFromText(text),
+    type: personalTypeFromText(text),
+    category: pickCategory(text, categories),
+    description: cleanPersonalDescription(text, found.raw),
+    amount: found.amount,
+    currency: /usd|ဒေါ်လာ/i.test(text) ? "USD" : /thb|baht/i.test(text) ? "THB" : "MMK",
+    payment_method: paymentMethodFromText(text),
+    note: "",
+  };
+}
+
+function methodFromText(text: string): BusinessEntry["method"] {
+  const lower = text.toLowerCase();
+  if (lower.includes("kpay") || lower.includes("k pay")) return "kpay";
+  if (lower.includes("wave")) return "wave";
+  if (lower.includes("binance") || lower.includes("usdt")) return "binance";
+  if (lower.includes("bank") || lower.includes("kbz") || lower.includes("aya")) return "bank_transfer";
+  if (lower.includes("cash")) return "cash";
+  return "cash";
+}
+
+function ruleParseBusiness(text: string): BusinessEntry | null {
+  const found = findAmount(text);
+  if (!found) return null;
+  const lower = text.toLowerCase();
+  const direction: BusinessEntry["direction"] =
+    text.includes("ရရန်") || text.includes("ရရန်း") || text.includes("ကျန်")
+      ? "receivable"
+      : text.includes("ပေးရန်")
+        ? "payable"
+        : text.includes("ဝင်") || lower.includes("in")
+          ? "in"
+          : "out";
+  const method = methodFromText(text);
+  const accountNo = normalizeDigits(text).match(/\b09\d{7,11}\b/)?.[0];
+  const accountType =
+    method === "kpay"
+      ? "KPay"
+      : method === "wave"
+        ? "Wave"
+        : method === "bank_transfer"
+          ? "Bank"
+          : "Cash";
+  const person = cleanPersonalDescription(text, found.raw)
+    .replace(/ဝင်|ထွက်|ပေးရန်|ရရန်|ကျန်|cash|kpay|wave|bank/gi, " ")
+    .replace(accountNo ?? "", " ")
+    .replace(/\s+/g, " ")
+    .trim() || "-";
+  return {
+    date: dateFromText(text),
+    direction,
+    person,
+    amount: found.amount,
+    currency: /usd|ဒေါ်လာ/i.test(text) ? "USD" : /thb|baht/i.test(text) ? "THB" : /usdt/i.test(text) ? "USDT" : "MMK",
+    method,
+    account_type: accountType,
+    account_no: accountNo,
+    in_amount: direction === "in" ? found.amount : 0,
+    out_amount: direction === "out" ? found.amount : 0,
+    debt_amount: direction === "receivable" || direction === "payable" ? found.amount : 0,
+    purpose: "-",
+    status: direction === "in" ? "received" : direction === "out" ? "paid" : "pending",
+    note: "",
   };
 }
 
@@ -226,15 +403,35 @@ function validateBusinessEntry(value: unknown): BusinessEntry {
 export async function parseMessage(opts: {
   book: Book;
   text: string;
-  aiKey: string;
+  aiKey?: string | null;
   baseUrl: string;
   model: string;
+  personalCategories?: string[] | null;
 }): Promise<ParsedPayload> {
+  const personalCategories =
+    opts.personalCategories?.length ? opts.personalCategories : [...PERSONAL_CATEGORIES];
+  const ruleParsed =
+    opts.book === "personal"
+      ? ruleParsePersonal(opts.text, personalCategories)
+      : ruleParseBusiness(opts.text);
+  if (ruleParsed) {
+    return {
+      book: opts.book,
+      ...(opts.book === "personal"
+        ? { personal: ruleParsed as PersonalEntry }
+        : { business: ruleParsed as BusinessEntry }),
+    } as ParsedPayload;
+  }
+
+  if (!opts.aiKey?.trim()) {
+    throw new Error("AI key မရှိသေးပါ။ Amount ပါတဲ့ simple format နဲ့ရေးပါ။ ဥပမာ - မုန့် 2000 cash");
+  }
+
   const system =
     opts.book === "personal" ? PERSONAL_SYSTEM : BUSINESS_SYSTEM;
   const user =
     opts.book === "personal"
-      ? userPromptPersonal(opts.text)
+      ? userPromptPersonal(opts.text, personalCategories)
       : userPromptBusiness(opts.text);
 
   const endpoint = `${opts.baseUrl.replace(/\/+$/, "")}/chat/completions`;
@@ -286,7 +483,7 @@ export async function parseMessage(opts: {
   return {
     book: opts.book,
     ...(opts.book === "personal"
-      ? { personal: validatePersonalEntry(json) }
+      ? { personal: validatePersonalEntry(json, personalCategories) }
       : { business: validateBusinessEntry(json) }),
   } as ParsedPayload;
 }

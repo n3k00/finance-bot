@@ -4,6 +4,7 @@ import {
   answerCallbackQuery,
   editMessageText,
   formatCard,
+  type InlineButton,
   sendMessage,
 } from "./_telegram.ts";
 import { insertEntry } from "./_notion.ts";
@@ -27,6 +28,22 @@ const TELEGRAM_BOT_TOKEN =
   Deno.env.get("TELEGRAM_BOT_TOKEN") ??
   Deno.env.get("TELEGRAM_MINI_APP_BOT_TOKEN") ??
   "";
+
+const DEFAULT_PERSONAL_CATEGORIES = [
+  "Food",
+  "Drink",
+  "Transport",
+  "Shopping",
+  "Bills",
+  "Entertainment",
+  "Health",
+  "Family Support",
+  "Education",
+  "Tobacco",
+  "Donation",
+  "Gift",
+  "Other",
+];
 
 async function dbSelect<T>(
   table: string,
@@ -102,7 +119,7 @@ async function findConfigByTelegramIdentity(
   fromId?: number,
 ): Promise<BotConfig | null> {
   const ids = Array.from(new Set([chatId, fromId].filter(Boolean))) as number[];
-  const filters =
+  const filters: Record<string, string | string[]> =
     ids.length > 1
       ? { or: ids.map((id) => `telegram_user_id.eq.${id}`).join(",") }
       : { telegram_user_id: `eq.${chatId}` };
@@ -121,7 +138,7 @@ async function findConfigByTelegramIdentity(
 
   const rows = await dbSelect<BotConfig>(
     "bot_config",
-    "user_id,ai_provider,ai_base_url,openai_api_key,openai_model,notion_token,personal_db_id,business_db_id",
+    "user_id,ai_provider,ai_base_url,openai_api_key,openai_model,personal_categories,notion_token,personal_db_id,business_db_id",
     { user_id: `eq.${allowed.linked_user_id}` },
   );
   return rows[0] ?? null;
@@ -130,7 +147,7 @@ async function findConfigByTelegramIdentity(
 async function findConfigByUserId(userId: string): Promise<BotConfig | null> {
   const rows = await dbSelect<BotConfig>(
     "bot_config",
-    "user_id,ai_provider,ai_base_url,openai_api_key,openai_model,notion_token,personal_db_id,business_db_id",
+    "user_id,ai_provider,ai_base_url,openai_api_key,openai_model,personal_categories,notion_token,personal_db_id,business_db_id",
     { user_id: `eq.${userId}` },
   );
   return rows[0] ?? null;
@@ -513,6 +530,15 @@ async function sendChatReply(
   chatId: number,
   text: string,
 ): Promise<void> {
+  if (!cfg.openai_api_key) {
+    await sendMessage(
+      TELEGRAM_BOT_TOKEN,
+      chatId,
+      "AI key မရှိသေးလို့ free rule parser နဲ့ စာရင်းမှတ်တာနဲ့ report မေးတာတွေကိုပဲ ဖြေပေးနိုင်ပါတယ်။ ဥပမာ - မုန့် 2000, /m ကိုအောင် kpay ဝင် 100000",
+    );
+    return;
+  }
+
   try {
     const reply = await answerChat({
       text,
@@ -529,6 +555,36 @@ async function sendChatReply(
       "ဘာကူညီပေးရမလဲ ပြောပါ။ စာရင်းသိမ်းချင်ရင် amount ပါအောင်ရေးပါ။ ဥပမာ - coffee 2500",
     );
   }
+}
+
+function personalCategories(cfg: BotConfig) {
+  return cfg.personal_categories?.length
+    ? cfg.personal_categories
+    : DEFAULT_PERSONAL_CATEGORIES;
+}
+
+function pendingKeyboard(
+  pendingId: string,
+  book: "personal" | "business",
+  categories: string[],
+): { inline_keyboard: InlineButton[][] } {
+  const rows: InlineButton[][] = [];
+  if (book === "personal") {
+    const visibleCategories = categories.slice(0, 12);
+    for (let i = 0; i < visibleCategories.length; i += 3) {
+      rows.push(
+        visibleCategories.slice(i, i + 3).map((category, offset) => ({
+          text: category,
+          callback_data: `cat:${pendingId}:${i + offset}`,
+        })),
+      );
+    }
+  }
+  rows.push([
+    { text: "သိမ်းမယ်", callback_data: `confirm:${pendingId}` },
+    { text: "မသိမ်းဘူး", callback_data: `cancel:${pendingId}` },
+  ]);
+  return { inline_keyboard: rows };
 }
 
 async function handleMessage(msg: TgMessage): Promise<void> {
@@ -597,6 +653,7 @@ async function handleMessage(msg: TgMessage): Promise<void> {
       aiKey: cfg.openai_api_key,
       baseUrl: cfg.ai_base_url || "https://api.openai.com/v1",
       model: cfg.openai_model || "gpt-4o-mini",
+      personalCategories: personalCategories(cfg),
     });
   } catch (err) {
     console.error("parseMessage error", err);
@@ -626,14 +683,12 @@ async function handleMessage(msg: TgMessage): Promise<void> {
   });
 
   const card = formatCard(book, payloadData as unknown as Record<string, unknown>);
-  await sendMessage(token, chatId, card, {
-    inline_keyboard: [
-      [
-        { text: "သိမ်းမယ်", callback_data: `confirm:${inserted.id}` },
-        { text: "မသိမ်းဘူး", callback_data: `cancel:${inserted.id}` },
-      ],
-    ],
-  });
+  await sendMessage(
+    token,
+    chatId,
+    card,
+    pendingKeyboard(inserted.id, book, personalCategories(cfg)),
+  );
 }
 
 async function handleCallback(cb: TgCallback): Promise<void> {
@@ -643,10 +698,10 @@ async function handleCallback(cb: TgCallback): Promise<void> {
   const messageId = cb.message?.message_id;
   if (!chatId || !messageId) return;
 
-  const m = /^(confirm|cancel):(.+)$/.exec(data);
+  const m = /^(confirm|cancel|cat):(.+?)(?::(\d+))?$/.exec(data);
   if (!m) return;
 
-  const [, action, pendingId] = m;
+  const [, action, pendingId, categoryIndex] = m;
   const rows = await dbSelect<PendingRow>(
     "pending_entries",
     "id,user_id,telegram_chat_id,telegram_message_id,book,raw_text,parsed_data,status",
@@ -664,6 +719,40 @@ async function handleCallback(cb: TgCallback): Promise<void> {
 
   if (pending.status !== "pending") {
     await answerCallbackQuery(token, cqId, "လုပ်ပြီးသားပါ");
+    return;
+  }
+
+  if (action === "cat") {
+    if (pending.book !== "personal" || !pending.parsed_data.personal) {
+      await answerCallbackQuery(token, cqId, "Category ပြင်လို့မရပါ");
+      return;
+    }
+    const categories = personalCategories(cfg);
+    const category = categories[Number(categoryIndex)];
+    if (!category) {
+      await answerCallbackQuery(token, cqId, "Category မတွေ့ပါ");
+      return;
+    }
+
+    const parsedData: ParsedPayload = {
+      ...pending.parsed_data,
+      personal: {
+        ...pending.parsed_data.personal,
+        category,
+      },
+    };
+
+    await dbUpdate("pending_entries", { id: `eq.${pending.id}` }, {
+      parsed_data: parsedData,
+    });
+    await answerCallbackQuery(token, cqId, `Category: ${category}`);
+    await editMessageText(
+      token,
+      chatId,
+      messageId,
+      formatCard("personal", parsedData.personal as unknown as Record<string, unknown>),
+      pendingKeyboard(pending.id, "personal", categories),
+    );
     return;
   }
 

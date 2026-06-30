@@ -5,16 +5,7 @@ export type Book = "personal" | "business";
 
 export type PersonalType = "Expense" | "Income" | "Transfer";
 export type PersonalCategory =
-  | "Food"
-  | "Drink"
-  | "Transport"
-  | "Shopping"
-  | "Bills"
-  | "Entertainment"
-  | "Health"
-  | "Family Support"
-  | "Education"
-  | "Other";
+  string;
 
 export interface PersonalEntry {
   date: string; // YYYY-MM-DD
@@ -68,8 +59,9 @@ export interface BotConfig {
   user_id: string;
   ai_provider: string;
   ai_base_url: string;
-  openai_api_key: string;
+  openai_api_key: string | null;
   openai_model: string;
+  personal_categories: string[] | null;
   notion_token: string | null;
   personal_db_id: string | null;
   business_db_id: string | null;

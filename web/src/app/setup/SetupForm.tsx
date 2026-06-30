@@ -22,6 +22,21 @@ const EMPTY: BotConfigInput = {
   ai_base_url: "https://api.openai.com/v1",
   openai_api_key: "",
   openai_model: "gpt-4o-mini",
+  personal_categories: [
+    "Food",
+    "Drink",
+    "Transport",
+    "Shopping",
+    "Bills",
+    "Entertainment",
+    "Health",
+    "Family Support",
+    "Education",
+    "Tobacco",
+    "Donation",
+    "Gift",
+    "Other",
+  ],
   notion_token: "",
   personal_db_id: "",
   business_db_id: "",
@@ -46,6 +61,7 @@ function toInput(
     ai_base_url: c.ai_base_url ?? "https://api.openai.com/v1",
     openai_api_key: "",
     openai_model: c.openai_model ?? "gpt-4o-mini",
+    personal_categories: c.personal_categories ?? EMPTY.personal_categories,
     notion_token: "",
     personal_db_id: c.personal_db_id ?? "",
     business_db_id: c.business_db_id ?? "",
@@ -124,6 +140,10 @@ export function SetupForm({
       ai_base_url: String(formData.get("ai_base_url") ?? ""),
       openai_api_key: String(formData.get("openai_api_key") ?? ""),
       openai_model: String(formData.get("openai_model") ?? "gpt-4o-mini"),
+      personal_categories: String(formData.get("personal_categories") ?? "")
+        .split(/\r?\n|,/)
+        .map((category) => category.trim())
+        .filter(Boolean),
       notion_token: String(formData.get("notion_token") ?? ""),
       personal_db_id: String(formData.get("personal_db_id") ?? ""),
       business_db_id: String(formData.get("business_db_id") ?? ""),
@@ -278,7 +298,6 @@ export function SetupForm({
         </div>
 
         {field("openai_api_key", "AI API key", {
-          required: !initial?.has_openai_api_key,
           type: "password",
           placeholder: initial?.has_openai_api_key
             ? "Saved key hidden"
@@ -286,7 +305,7 @@ export function SetupForm({
           status: initial?.has_openai_api_key ? "Saved" : undefined,
           help: initial?.has_openai_api_key
             ? "Configured. Leave blank to keep the saved key."
-            : "Use the API key from your selected AI provider.",
+            : "Optional. Simple entries use the built-in rule parser; AI is only used as fallback.",
         })}
         <div>
           <div className="mb-1.5 flex items-center justify-between gap-3">
@@ -339,6 +358,30 @@ export function SetupForm({
             </p>
           ) : null}
         </div>
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium text-slate-700">
+            Personal categories
+          </span>
+          <textarea
+            name="personal_categories"
+            value={form.personal_categories.join("\n")}
+            onChange={(e) =>
+              update(
+                "personal_categories",
+                e.target.value
+                  .split(/\r?\n|,/)
+                  .map((category) => category.trim())
+                  .filter(Boolean),
+              )
+            }
+            rows={7}
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-6 text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-4 focus:ring-slate-100"
+          />
+          <span className="mt-1.5 block text-xs leading-5 text-slate-500">
+            One category per line. Keyword rules and AI fallback will use this
+            list.
+          </span>
+        </label>
       </Section>
 
       <Section

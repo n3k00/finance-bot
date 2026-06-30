@@ -9,8 +9,23 @@ create table if not exists public.bot_config (
   telegram_bot_token   text,
   ai_provider          text not null default 'openai',
   ai_base_url          text not null default 'https://api.openai.com/v1',
-  openai_api_key       text not null,
+  openai_api_key       text,
   openai_model         text not null default 'gpt-4o-mini',
+  personal_categories  text[] not null default array[
+    'Food',
+    'Drink',
+    'Transport',
+    'Shopping',
+    'Bills',
+    'Entertainment',
+    'Health',
+    'Family Support',
+    'Education',
+    'Tobacco',
+    'Donation',
+    'Gift',
+    'Other'
+  ],
   notion_token         text,
   personal_db_id       text,
   business_db_id       text,
@@ -83,6 +98,8 @@ create index if not exists telegram_allowlist_linked_user_idx
 alter table public.bot_config
   alter column telegram_bot_token drop not null;
 alter table public.bot_config
+  alter column openai_api_key drop not null;
+alter table public.bot_config
   alter column notion_token drop not null;
 alter table public.entries_log
   alter column notion_page_id drop not null;
@@ -92,6 +109,22 @@ alter table public.bot_config
   add column if not exists ai_provider text not null default 'openai';
 alter table public.bot_config
   add column if not exists ai_base_url text not null default 'https://api.openai.com/v1';
+alter table public.bot_config
+  add column if not exists personal_categories text[] not null default array[
+    'Food',
+    'Drink',
+    'Transport',
+    'Shopping',
+    'Bills',
+    'Entertainment',
+    'Health',
+    'Family Support',
+    'Education',
+    'Tobacco',
+    'Donation',
+    'Gift',
+    'Other'
+  ];
 
 -- 4) updated_at triggers ----------------------------------------
 create or replace function public.touch_updated_at()
