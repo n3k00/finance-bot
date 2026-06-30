@@ -617,7 +617,7 @@ async function handleMessage(msg: TgMessage): Promise<void> {
 
   const token = TELEGRAM_BOT_TOKEN;
 
-  if (!text || text === "/start" || text === "/help") {
+  if (!text || text === "/start" || text === "/help" || text === "/?") {
     await sendMessage(
       token,
       chatId,
