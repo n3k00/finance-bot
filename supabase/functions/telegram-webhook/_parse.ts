@@ -237,12 +237,22 @@ function dateFromText(text: string) {
 
 function findAmount(text: string) {
   const normalized = normalizeDigits(text);
-  const match = /(?:^|[^\d])(\d[\d,]*(?:\.\d+)?)(?:\s*(?:ကျပ်|ks|mmk|baht|thb|usd|usdt|ဒေါ်လာ))?/i.exec(
+  const match = /(?:^|[^\d])(\d[\d,]*(?:\.\d+)?)(?:\s*(သောင်း|သိန်း|သန်း|ကျပ်|ks|mmk|baht|thb|usd|usdt|ဒေါ်လာ))?/i.exec(
     normalized,
   );
   if (!match) return null;
-  const amount = Number(match[1].replace(/,/g, ""));
-  return Number.isFinite(amount) && amount > 0 ? { amount, raw: match[1] } : null;
+  const baseAmount = Number(match[1].replace(/,/g, ""));
+  const multiplier =
+    match[2] === "သောင်း"
+      ? 10_000
+      : match[2] === "သိန်း"
+        ? 100_000
+        : match[2] === "သန်း"
+          ? 1_000_000
+          : 1;
+  const amount = baseAmount * multiplier;
+  const raw = `${match[1]}${match[2] ?? ""}`;
+  return Number.isFinite(amount) && amount > 0 ? { amount, raw } : null;
 }
 
 function pickCategory(text: string, categories: string[]) {
@@ -293,7 +303,7 @@ function cleanPersonalDescription(text: string, amountRaw: string) {
   let description = normalizeDigits(text);
   description = description.replace(amountRaw, " ");
   description = description.replace(/\b(today|yesterday)\b/gi, " ");
-  description = description.replace(/ဒီနေ့|ယနေ့|မနေ့က|မနေ့|ကျပ်|ks|mmk|kyats?/gi, " ");
+  description = description.replace(/ဒီနေ့|ယနေ့|မနေ့က|မနေ့|သောင်း|သိန်း|သန်း|ကျပ်|ks|mmk|kyats?/gi, " ");
   description = description.replace(/\b(kpay|k pay|wave|cash|bank|card|kbz|aya)\b/gi, " ");
   description = description.replace(/(ကုန်တယ်|ကုန်|သုံးတယ်|သုံး|ဝင်တယ်|ဝင်|ပေးတယ်|ပေး)\s*$/gi, " ");
   description = description.replace(/\s+/g, " ").trim();
@@ -325,6 +335,16 @@ function methodFromText(text: string): BusinessEntry["method"] {
   return "cash";
 }
 
+function cleanBusinessPerson(text: string, amountRaw: string, accountNo?: string) {
+  return cleanPersonalDescription(text, amountRaw)
+    .replace(accountNo ?? "", " ")
+    .replace(/\b(cash|kpay|k pay|wave|bank|kbz|aya|card)\b/gi, " ")
+    .replace(/အဝင်|ဝင်|အထွက်|ထွက်|ပေးရန်|ရရန်|ကျန်/gi, " ")
+    .replace(/လွှဲ|လွဲ|ပေး|ကို|မှ|က/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim() || "-";
+}
+
 function ruleParseBusiness(text: string): BusinessEntry | null {
   const found = findAmount(text);
   if (!found) return null;
@@ -347,11 +367,7 @@ function ruleParseBusiness(text: string): BusinessEntry | null {
         : method === "bank_transfer"
           ? "Bank"
           : "Cash";
-  const person = cleanPersonalDescription(text, found.raw)
-    .replace(/ဝင်|ထွက်|ပေးရန်|ရရန်|ကျန်|cash|kpay|wave|bank/gi, " ")
-    .replace(accountNo ?? "", " ")
-    .replace(/\s+/g, " ")
-    .trim() || "-";
+  const person = cleanBusinessPerson(text, found.raw, accountNo);
   return {
     date: dateFromText(text),
     direction,
